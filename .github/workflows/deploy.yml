@@ -1,0 +1,58 @@
+name: deploy-main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          cat >>~/.ssh/config <<END
+          Host sw-festival-ec2
+            HostName $EC2_IP
+            User $EC2_USER
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+          END
+        env:
+          EC2_USER: ubuntu
+          EC2_IP: ${{ secrets.EC2_IP }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Copy Workspace
+        run: |
+          ssh sw-festival-ec2 'sudo mkdir -p /opt/app'
+          ssh sw-festival-ec2 'sudo chown ubuntu:ubuntu /opt/app'
+          scp -r ./[!.]* sw-festival-ec2:/opt/app
+
+      - name: Install dependencies
+        run: |
+          ssh sw-festival-ec2 'npm install --legacy-peer-deps --prefix /opt/app/' || ssh sw-festival-ec2 'npm install --force --prefix /opt/app/'
+
+      - name: Install PM2 Globally
+        run: |
+          ssh sw-festival-ec2 'sudo npm install -g pm2'
+
+      - name: Start Application with PM2
+        run: |
+          ssh sw-festival-ec2 'pm2 start /opt/app/app.js --name "9roommoa"'
+
+      - name: Save PM2 Process List
+        run: |
+          ssh sw-festival-ec2 'pm2 save'
+
+      - name: Check PM2 Process List
+        run: |
+          ssh sw-festival-ec2 'pm2 list'
