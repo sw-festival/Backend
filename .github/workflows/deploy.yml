@@ -47,7 +47,7 @@ jobs:
 
       - name: Start Application with PM2
         run: |
-          ssh sw-festival-ec2 'pm2 start /opt/app/app.js --name "9roommoa"'
+          ssh sw-festival-ec2 'pm2 start /opt/app/app.js --name "festival"'
 
       - name: Save PM2 Process List
         run: |
