@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const cors = require('cors');
+const { initDB, Product } = require('./src/models');
 
 dotenv.config();
 
@@ -38,6 +39,10 @@ app.use(
     exposedHeaders: ['Content-Disposition'],
   })
 );
+
+(async () => {
+  await initDB({ alter: true });
+})();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
