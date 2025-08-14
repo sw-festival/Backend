@@ -1,14 +1,18 @@
-const { DiningTable } = require('../models');
+const crypto = require('crypto');
+const { StatusCodes } = require('http-status-codes');
+const { sequelize, DiningTable, TableQrToken } = require('../models');
+const AppError = require('../errors/AppError');
 const hashids = require('../utils/hashids');
 
-const FE_BASE =
-  process.env.FE_BASE_URL || 'http://localhost:8080'.replace(/\/+$/, '');
-
+const FE_BASE = (process.env.FE_BASE_URL || 'http://localhost:8080').replace(
+  /\/+$/,
+  ''
+);
 exports.ensureTableByLabel = async ({ label, active }) => {
   try {
     const [table, created] = await DiningTable.findOrCreate({
       where: { label },
-      defaults: { is_active: active },
+      defaults: { is_active: !!active },
     });
 
     if (!table.slug) {
@@ -24,16 +28,51 @@ exports.ensureTableByLabel = async ({ label, active }) => {
   }
 };
 
-exports.rotateQrToken = async (tableId) => {
-  const table = await DiningTable.findByPk(tableId);
+exports.rotateQrToken = async (tableId, { ttlMin = null } = {}) => {
+  return sequelize.transaction(async (t) => {
+    // 1) 테이블 확인 + 잠금(동시 갱신 방지)
+    const table = await DiningTable.findByPk(tableId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!table)
+      throw new AppError(
+        `Table with id ${tableId} not found`,
+        StatusCodes.NOT_FOUND
+      );
 
-  if (!table) {
-  }
+    // 2) slug도 새로 회전(원하면 유지해도 되지만 회전과 보안 레벨을 맞추려면 갱신 권장)
+    table.slug = hashids.encode(table.id, Date.now());
+    await table.save({ transaction: t });
 
-  table.slug = hashids.encode(table.id, Date.now());
-  await table.save();
+    // 3) 기존 ACTIVE 토큰 REVOKE
+    await TableQrToken.update(
+      { status: 'REVOKED', revoked_at: new Date() },
+      { where: { table_id: table.id, status: 'ACTIVE' }, transaction: t }
+    );
 
-  const slugUrl = `${FE_BASE}/t/${table.slug}`;
+    // 4) 신규 토큰 발급(+ 만료 시간)
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires_at = ttlMin ? new Date(Date.now() + ttlMin * 60000) : null;
 
-  return { table, qr: { slugUrl } };
+    const rec = await TableQrToken.create(
+      { table_id: table.id, token, status: 'ACTIVE', expires_at },
+      { transaction: t }
+    );
+
+    // 5) FE가 스캔할 URL (token 방식)
+    const tokenUrl = `${FE_BASE}/t?code=${rec.token}`;
+
+    return {
+      table: {
+        id: table.id,
+        label: table.label,
+        slug: table.slug,
+        is_active: table.is_active,
+      },
+      qr: { tokenUrl, slugUrl: `${FE_BASE}/t/${table.slug}` },
+      token: rec.token,
+      expires_at,
+    };
+  });
 };
