@@ -7,6 +7,7 @@ const cors = require('cors');
 const { initDB } = require('./src/models/bootstrap');
 
 const adminRouter = require('./src/routes/admin.route');
+const errorHandler = require('./src/middlewares/errorHandler');
 
 dotenv.config();
 
@@ -66,7 +67,7 @@ app.use(
 app.use('/api/admin', adminRouter);
 
 // 에러 핸들링 미들웨어
-// app.use(errorHandler);
+app.use(errorHandler);
 
 // connectDB();
 

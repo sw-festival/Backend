@@ -1,7 +1,8 @@
 const { DiningTable } = require('../models');
 const hashids = require('../utils/hashids');
 
-const FE_BASE = process.env.FE_BASE_URL || 'http://localhost:8080';
+const FE_BASE =
+  process.env.FE_BASE_URL || 'http://localhost:8080'.replace(/\/+$/, '');
 
 exports.ensureTableByLabel = async ({ label, active }) => {
   try {
@@ -21,4 +22,18 @@ exports.ensureTableByLabel = async ({ label, active }) => {
   } catch (err) {
     throw err;
   }
+};
+
+exports.rotateQrToken = async (tableId) => {
+  const table = await DiningTable.findByPk(tableId);
+
+  if (!table) {
+  }
+
+  table.slug = hashids.encode(table.id, Date.now());
+  await table.save();
+
+  const slugUrl = `${FE_BASE}/t/${table.slug}`;
+
+  return { table, qr: { slugUrl } };
 };
