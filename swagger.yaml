@@ -1,0 +1,304 @@
+openapi: 3.0.3
+info:
+  title: SW Festival API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api/
+    description: Local dev
+
+paths:
+  /admin/tables/ensure:
+    post:
+      summary: Ensure table by label (create if missing) and return slug URL
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+                  example: A-10
+                active:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Created (table newly created)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnsureTableResponse'
+              examples:
+                created:
+                  value:
+                    success: true
+                    message: created successfully
+                    data:
+                      table:
+                        { id: 1, label: A-10, slug: ezygbX, is_active: true }
+                      qr: { slugUrl: 'http://localhost:8080/t/ezygbX' }
+                      created: true
+        '200':
+          description: OK (table already existed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnsureTableResponse'
+              examples:
+                existed:
+                  value:
+                    success: true
+                    message: request retrieved successfully
+                    data:
+                      table:
+                        { id: 1, label: A-10, slug: ezygbX, is_active: true }
+                      qr: { slugUrl: 'http://localhost:8080/t/ezygbX' }
+                      created: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /admin/tables/{id}/qr/update:
+    post:
+      summary: Rotate QR token for a table (revoke old, issue new)
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+          description: Table ID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateTokenResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: QR token rotated successfully
+                    data:
+                      table:
+                        id: 1
+                        label: A-10
+                        slug: WKSo9VVdn8v
+                        is_active: true
+                      qr:
+                        tokenUrl: 'http://localhost:8080/t?code=f07e...c2'
+                        slugUrl: 'http://localhost:8080/t/WKSo9VVdn8v'
+                      token: 'f07e...c2'
+                      expires_at: null
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /sessions/resolve:
+    post:
+      summary: Open a session by rotating token (QR code)
+      tags: [Public]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: Active QR token from the scanned URL (?code=...)
+                  example: f07e0f4d5b3b4f8eac...
+      responses:
+        '200':
+          description: Session opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOpenResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: session opened
+                    data:
+                      session_token: '4e6d...ab'
+                      session_id: 321
+                      table: { id: 1, label: A-10, slug: q8L2Xa }
+                      abs_ttl_min: 120
+                      idle_ttl_min: 30
+        '422':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid:
+                  value: { success: false, message: 'invalid or revoked token' }
+                expired:
+                  value: { success: false, message: 'token expired' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /sessions/{id}/close:
+    post:
+      summary: Force-close a session by ID
+      tags: [Public]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+              examples:
+                ok:
+                  value:
+                    { success: true, message: 'session closed successfully' }
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notfound:
+                  value: { success: false, message: 'session not found' }
+        '409':
+          description: Session not open (already closed/expired)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                conflict:
+                  value: { success: false, message: 'session not open' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    Table:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        label: { type: string, example: A-10 }
+        slug: { type: string, example: ezygbX }
+        is_active: { type: boolean, example: true }
+    EnsureTableData:
+      type: object
+      properties:
+        table:
+          $ref: '#/components/schemas/Table'
+        qr:
+          type: object
+          properties:
+            slugUrl: { type: string, example: 'http://localhost:8080/t/ezygbX' }
+        created: { type: boolean, example: true }
+    EnsureTableResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: created successfully }
+        data:
+          $ref: '#/components/schemas/EnsureTableData'
+
+    RotateTokenData:
+      type: object
+      properties:
+        table:
+          $ref: '#/components/schemas/Table'
+        qr:
+          type: object
+          properties:
+            tokenUrl:
+              {
+                type: string,
+                example: 'http://localhost:8080/t?code=f07e...c2',
+              }
+            slugUrl:
+              { type: string, example: 'http://localhost:8080/t/WKSo9VVdn8v' }
+        token: { type: string, example: f07e...c2 }
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+    RotateTokenResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: QR token rotated successfully }
+        data:
+          $ref: '#/components/schemas/RotateTokenData'
+
+    SessionOpenData:
+      type: object
+      properties:
+        session_token: { type: string, example: '4e6d...ab' }
+        session_id: { type: integer, example: 321 }
+        table:
+          $ref: '#/components/schemas/Table'
+        abs_ttl_min: { type: integer, example: 120 }
+        idle_ttl_min: { type: integer, example: 30 }
+    SessionOpenResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: session opened }
+        data:
+          $ref: '#/components/schemas/SessionOpenData'
+
+    SimpleOkResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: session closed successfully }
+
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string, example: Bad Request }
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missingLabel:
+              value: { success: false, message: 'label (string) is required' }
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notfound:
+              value: { success: false, message: 'table not found or inactive' }
+    ServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
