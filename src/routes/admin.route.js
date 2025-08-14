@@ -7,4 +7,6 @@ router.post('/tables/ensure', adminController.ensureTableByLabel);
 
 router.post('/tables/:id/qr/update', adminController.rotateQrToken);
 
+router.post('/login', adminController.login);
+
 module.exports = router;
