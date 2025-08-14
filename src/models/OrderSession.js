@@ -30,7 +30,7 @@ const OrderSession = sequelize.define(
     tableName: 'order_sessions',
     indexes: [
       { unique: true, fields: ['session_token'] },
-      { unique: true, fields: ['table_id', 'active_flag'] }, // 테이블당 OPEN 1개 보장
+      // { unique: true, fields: ['table_id', 'active_flag'] }, // 테이블당 OPEN 1개 보장
       { fields: ['table_id', 'status'] },
     ],
   }
