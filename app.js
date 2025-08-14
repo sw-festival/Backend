@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const cors = require('cors');
-const { initDB, Product } = require('./src/models');
+const { initDB } = require('./src/models/bootstrap');
 
 dotenv.config();
 
