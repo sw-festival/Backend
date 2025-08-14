@@ -16,8 +16,8 @@ const Order = sequelize.define(
     },
     status: {
       type: DataTypes.ENUM(
-        'PENDING',
-        'CONFIRMED',
+        'PENDING', // 입금 대기
+        'CONFIRMED', // 입금 확인 후 주문 수락
         'IN_PROGRESS',
         'SERVED',
         'CANCELED'
