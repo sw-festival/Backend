@@ -16,6 +16,12 @@ Order.belongsTo(DiningTable, {
 });
 DiningTable.hasMany(Order, { foreignKey: 'table_id' });
 
+// 주문 ←→ 세션 (신규)
+Order.belongsTo(OrderSession, {
+  foreignKey: { name: 'order_session_id', allowNull: false },
+});
+OrderSession.hasMany(Order, { foreignKey: 'order_session_id' });
+
 // 주문 ←→ 라인아이템
 Order.hasMany(OrderProduct, {
   as: 'items',
