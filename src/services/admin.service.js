@@ -80,11 +80,11 @@ exports.rotateQrToken = async (tableId, { ttlMin = null } = {}) => {
 
 exports.login = async (pin) => {
   if (!pin) {
-    throw AppError('PIN is required', StatusCodes.BAD_REQUEST);
+    throw new AppError('PIN is required', StatusCodes.BAD_REQUEST);
   }
 
   if (pin !== process.env.ADMIN_PIN) {
-    throw AppError('Invalid PIN', StatusCodes.UNAUTHORIZED);
+    throw new AppError('Invalid PIN', StatusCodes.UNAUTHORIZED);
   }
 
   const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, {

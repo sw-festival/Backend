@@ -30,24 +30,16 @@ if (isProd) {
 }
 
 // ===== CORS: 한 파일에서 동적 허용 =====
-const clientOriginDev = (process.env.CLIENT_ORIGIN_DEV || '')
-  .split(',')
-  .filter(Boolean);
-const clientOriginProd = (process.env.CLIENT_ORIGIN_PROD || '')
-  .split(',')
-  .filter(Boolean);
-const allowedOrigins = isProd ? clientOriginProd : clientOriginDev;
+const allowedOrigin = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(',')
+  : ['http://localhost:3000'];
 
 // origin을 함수로 주면 더 유연함(와일드카드/프리뷰 도메인 대응)
 app.use(
   cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // 모바일앱/서버-서버 호출 허용
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error(`Not allowed by CORS: ${origin}`), false);
-    },
-    credentials: true,
+    origin: allowedOrigin,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    credentials: true,
     exposedHeaders: ['Content-Disposition'],
   })
 );
