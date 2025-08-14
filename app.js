@@ -6,6 +6,8 @@ const morgan = require('morgan');
 const cors = require('cors');
 const { initDB } = require('./src/models/bootstrap');
 
+const adminRouter = require('./src/routes/admin.route');
+
 dotenv.config();
 
 const app = express();
@@ -60,6 +62,8 @@ app.use(
     },
   })
 );
+
+app.use('/api/admin', adminRouter);
 
 // 에러 핸들링 미들웨어
 // app.use(errorHandler);
