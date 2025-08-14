@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { StatusCodes } = require('http-status-codes');
 const { sequelize, DiningTable, TableQrToken } = require('../models');
 const AppError = require('../errors/AppError');
@@ -75,4 +76,20 @@ exports.rotateQrToken = async (tableId, { ttlMin = null } = {}) => {
       expires_at,
     };
   });
+};
+
+exports.login = async (pin) => {
+  if (!pin) {
+    throw new AppError('PIN is required', StatusCodes.BAD_REQUEST);
+  }
+
+  if (pin !== process.env.ADMIN_PIN) {
+    throw new AppError('Invalid PIN', StatusCodes.UNAUTHORIZED);
+  }
+
+  const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  });
+
+  return token;
 };

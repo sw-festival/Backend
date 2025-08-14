@@ -192,6 +192,53 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /admin/login:
+    post:
+      summary: Admin PIN login (issue JWT)
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+            examples:
+              sample:
+                value: { pin: '1234' }
+      responses:
+        '200':
+          description: Login successful (JWT issued)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: 'Login successful'
+                    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+        '400':
+          description: Missing PIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing:
+                  value: { success: false, message: 'PIN is required' }
+        '401':
+          description: Invalid PIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid:
+                  value: { success: false, message: 'Invalid PIN' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
 components:
   schemas:
     Table:
@@ -247,6 +294,24 @@ components:
         message: { type: string, example: QR token rotated successfully }
         data:
           $ref: '#/components/schemas/RotateTokenData'
+
+    AdminLoginRequest:
+      type: object
+      required: [pin]
+      properties:
+        pin:
+          type: string
+          example: '1234'
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: Login successful }
+        token:
+          type: string
+          description: 'JWT. Use as Authorization: Bearer <token>'
+          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
 
     SessionOpenData:
       type: object

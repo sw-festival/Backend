@@ -52,3 +52,15 @@ exports.rotateQrToken = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.login = async (req, res, next) => {
+  try {
+    const { pin } = req.body;
+    const token = await adminService.login(pin);
+    return res
+      .status(StatusCodes.OK)
+      .json({ success: true, message: 'Login successfully', token });
+  } catch (err) {
+    next(err);
+  }
+};
