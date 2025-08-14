@@ -19,3 +19,20 @@ exports.openSessionByToken = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.closeSessionById = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      throw new AppError('invalid session id', StatusCodes.BAD_REQUEST);
+    }
+
+    await sessionService.closeSessionById(id);
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'session closed successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};

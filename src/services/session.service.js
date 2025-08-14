@@ -81,3 +81,22 @@ exports.openSessionByToken = async (code) => {
     return openSessionForTable(table, t);
   });
 };
+
+exports.closeSessionById = async (sessionId) => {
+  const ses = await OrderSession.findByPk(sessionId);
+  if (!ses) {
+    throw new AppError('session not found', StatusCodes.NOT_FOUND);
+  }
+
+  if (ses.status !== 'OPEN') {
+    throw new AppError('session is already not opened', StatusCodes.CONFLICT);
+  }
+
+  await ses.update({
+    status: 'CLOSED',
+    active_flag: 0,
+    closed_reason: 'STAFF_CLOSED',
+  });
+
+  return { ok: true };
+};
