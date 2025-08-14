@@ -71,7 +71,7 @@ app.use(
 );
 
 // ===== Swagger: 한 파일에서 동적 서버 주입 =====
-const swaggerDocRaw = YAML.load(path.join(process.cwd(), './swagger.yaml'));
+const swaggerDocRaw = YAML.load(path.join(__dirname, 'swagger.yaml'));
 
 const makeDocPerRequest = (req) => {
   const isProd = process.env.NODE_ENV === 'production';
