@@ -6,6 +6,6 @@ const adminAuth = require('../middlewares/adminAuth');
 
 router.post('/', sessionAuth, orderController.createOrder);
 
-router.patch('/:id/status', adminAuth, orderController.updateStatus);
+router.patch('/:id/status', adminAuth, orderController.updateOrderStatus);
 
 module.exports = router;
