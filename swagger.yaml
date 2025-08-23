@@ -239,6 +239,95 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+
+  /orders:
+    post:
+      summary: Create an order (session required)
+      description: Create a new order with line items. Uses session token from QR flow. TAKEOUT applies 10% discount.
+      tags: [Public]
+      parameters:
+        - in: header
+          name: x-session-token
+          required: false
+          schema: { type: string }
+          description: Session token (preferred). Alternatively use `Authorization: Session <token>`.
+        - in: header
+          name: Authorization
+          required: false
+          schema: { type: string, example: "Session 4e6d...ab" }
+          description: Alternative header if `x-session-token` is not used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+            examples:
+              dine_in:
+                summary: DINE_IN example
+                value:
+                  order_type: DINE_IN
+                  payer_name: 임승우
+                  items:
+                    - { product_id: 1, quantity: 2 }
+                    - { product_id: 3, quantity: 1 }
+              takeout:
+                summary: TAKEOUT example (10% off)
+                value:
+                  order_type: TAKEOUT
+                  payer_name: 임승우
+                  items:
+                    - { product_id: 2, quantity: 1 }
+                    - { product_id: 5, quantity: 3 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreateResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: order created
+                    data:
+                      order_id: 123
+                      order_type: DINE_IN
+                      status: PENDING
+                      subtotal_amount: 22000.00
+                      discount_amount: 0.00
+                      total_amount: 22000.00
+        '400':
+          description: Bad Request (invalid items, quantity < 1, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidItems:
+                  value: { success: false, message: 'items required' }
+        '401':
+          description: Unauthorized (missing/invalid session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noSession:
+                  value: { success: false, message: 'No session token' }
+        '409':
+          description: Conflict (out of stock, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                conflict:
+                  value: { success: false, message: 'out of stock' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
 components:
   schemas:
     Table:
@@ -312,6 +401,50 @@ components:
           type: string
           description: 'JWT. Use as Authorization: Bearer <token>'
           example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+
+    
+    OrderItemInput:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: { type: integer, example: 1, minimum: 1 }
+        quantity:   { type: integer, example: 2, minimum: 1 }
+
+    OrderCreateRequest:
+      type: object
+      required: [items]
+      properties:
+        order_type:
+          type: string
+          enum: [DINE_IN, TAKEOUT]
+          default: DINE_IN
+        payer_name:
+          type: string
+          nullable: true
+          example: 임승우
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItemInput'
+
+    OrderCreateData:
+      type: object
+      properties:
+        order_id:        { type: integer, example: 123 }
+        order_type:      { type: string, example: DINE_IN }
+        status:          { type: string, example: PENDING }
+        subtotal_amount: { type: number, format: float, example: 22000.00 }
+        discount_amount: { type: number, format: float, example: 0.00 }
+        total_amount:    { type: number, format: float, example: 22000.00 }
+
+    OrderCreateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: order created }
+        data:
+          $ref: '#/components/schemas/OrderCreateData'
 
     SessionOpenData:
       type: object
