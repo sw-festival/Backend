@@ -27,7 +27,7 @@ const ALLOWED_ACTIONS = new Set(['confirm', 'start', 'serve', 'cancel']);
 
 exports.updateOrderStatus = async (req, res, next) => {
   try {
-    const orderId = req.params.id;
+    const orderId = Number(req.params.id);
     if (!Number.isInteger(orderId) || orderId <= 0) {
       throw new AppError(
         `Invalid order id: ${orderId}`,
