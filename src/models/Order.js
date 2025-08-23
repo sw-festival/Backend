@@ -36,6 +36,13 @@ const Order = sequelize.define(
       comment: '주문 유형(매장/포장)',
     },
 
+    // + 세션 내 순번
+    order_seq: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      comment: '세션 내 n번째 주문(1부터 시작)',
+    },
+
     status: {
       type: DataTypes.ENUM(
         'PENDING',
@@ -69,10 +76,15 @@ const Order = sequelize.define(
   {
     tableName: 'orders',
     indexes: [
-      { name: 'idx_orders_session', fields: ['order_session_id'] },
-      { name: 'idx_orders_table', fields: ['table_id'] },
-      { name: 'idx_orders_type', fields: ['order_type'] },
+      { name: 'idx_orders_order_session_id', fields: ['order_session_id'] },
+      { name: 'idx_orders_table_id', fields: ['table_id'] },
       { name: 'idx_orders_status', fields: ['status'] },
+      // 세션 내 순번 유일 보장
+      {
+        name: 'uq_orders_session_seq',
+        unique: true,
+        fields: ['order_session_id', 'order_seq'],
+      },
     ],
   }
 );

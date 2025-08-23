@@ -22,6 +22,11 @@ const OrderSession = sequelize.define(
       defaultValue: 'OPEN',
     },
     visit_started_at: { type: DataTypes.DATE, allowNull: true },
+    order_count: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+    },
     last_active_at: { type: DataTypes.DATE, allowNull: true },
     active_flag: { type: DataTypes.TINYINT, allowNull: false, defaultValue: 1 },
     closed_reason: { type: DataTypes.STRING(64), allowNull: true },
