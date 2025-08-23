@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const AppError = require('../errors/AppError');
 const { StatusCodes } = require('http-status-codes');
 const { makeRandomToken } = require('../utils/token');
+const { withRetry } = require('../utils/retry');
 const {
   sequelize,
   DiningTable,
@@ -84,91 +85,59 @@ exports.openSessionByToken = async (code) => {
   });
 };
 
-async function withDeadlockRetry(fn, { attempts = 3, delayMs = 60 } = {}) {
-  let lastErr;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      // MySQL deadlock
-      if (
-        err?.original?.code === 'ER_LOCK_DEADLOCK' ||
-        err?.parent?.code === 'ER_LOCK_DEADLOCK'
-      ) {
-        lastErr = err;
-        // 지수 백오프
-        await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, i)));
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastErr;
-}
-
 exports.openBySlugWithCode = async ({ slug, code }) => {
-  if (!slug || !code) {
+  if (!slug || !code)
     throw new AppError('slug and code required', StatusCodes.BAD_REQUEST);
-  }
-
   const expected = String(process.env.SESSION_OPEN_CODE || '');
-  if (!expected) {
+  if (!expected)
     throw new AppError(
       'SESSION_OPEN_CODE not configured',
       StatusCodes.INTERNAL_SERVER_ERROR
     );
-  }
-  if (String(code) !== expected) {
+  if (String(code) !== expected)
     throw new AppError('invalid code', StatusCodes.UNPROCESSABLE_ENTITY);
-  }
 
-  return await withDeadlockRetry(async () => {
+  return await withRetry(async () => {
     return await sequelize.transaction(async (t) => {
-      // 1) 테이블 잠금
       const table = await DiningTable.findOne({
         where: { slug, is_active: true },
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
-      if (!table) {
+      if (!table)
         throw new AppError(
           'table not found or inactive',
           StatusCodes.NOT_FOUND
         );
-      }
 
-      // 2) 이 테이블의 OPEN 세션 id들을 "잠그고" 고정된 순서로 수집
       const openRows = await OrderSession.findAll({
         attributes: ['id'],
         where: { table_id: table.id, status: 'OPEN' },
         order: [['id', 'ASC']],
         transaction: t,
-        lock: t.LOCK.UPDATE, // SELECT ... FOR UPDATE
+        lock: t.LOCK.UPDATE,
       });
-
       const openIds = openRows.map((r) => r.id);
-      if (openIds.length > 0) {
-        // 3) 모아둔 id들만 일괄 UPDATE
+      if (openIds.length) {
         await OrderSession.update(
           { status: 'EXPIRED', active_flag: 0 },
           { where: { id: openIds }, transaction: t }
         );
       }
 
-      // 4) 새 세션 생성
       const now = new Date();
       const ses = await OrderSession.create(
         {
           table_id: table.id,
           session_token: makeRandomToken(),
           status: 'OPEN',
+          visit_started_at: now,
           last_active_at: now,
           active_flag: 1,
         },
         { transaction: t }
       );
 
-      // 5) 현재 세션 포인터 갱신
       table.current_session_id = ses.id;
       await table.save({ transaction: t });
 
@@ -177,7 +146,7 @@ exports.openBySlugWithCode = async ({ slug, code }) => {
         session_token: ses.session_token,
         table: { id: table.id, label: table.label, slug: table.slug },
         abs_ttl_min: Number(process.env.SESSION_ABS_TTL_MIN || 120),
-        idle_ttl_min: Number(process.env.SESSION_IDLE_TTL_MIN || 120),
+        idle_ttl_min: Number(process.env.SESSION_IDLE_TTL_MIN || 30),
       };
     });
   });

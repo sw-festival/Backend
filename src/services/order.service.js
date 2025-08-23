@@ -7,30 +7,7 @@ const {
   Product,
   OrderSession,
 } = require('../models');
-
-async function withDeadlockRetry(
-  fn,
-  { retries = 4, minDelayMs = 15, maxDelayMs = 60 } = {}
-) {
-  let attempt = 0;
-  // 지수 + 랜덤 백오프
-  while (true) {
-    try {
-      return await fn();
-    } catch (err) {
-      const code = err?.parent?.code || err?.original?.code;
-      if (code !== 'ER_LOCK_DEADLOCK' || attempt >= retries) throw err;
-      const jitter =
-        Math.floor(Math.random() * (maxDelayMs - minDelayMs + 1)) + minDelayMs;
-      const sleep = Math.min(
-        maxDelayMs,
-        (minDelayMs + jitter) * (1 << attempt)
-      );
-      await new Promise((r) => setTimeout(r, sleep));
-      attempt++;
-    }
-  }
-}
+const { withRetry } = require('../utils/retry');
 
 exports.createOrder = async ({ session, order_type, payer_name, items }) => {
   if (!session)
@@ -38,10 +15,9 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
   if (!Array.isArray(items) || items.length === 0)
     throw new AppError('items required', StatusCodes.BAD_REQUEST);
 
-  return await withDeadlockRetry(async () => {
+  return await withRetry(async () => {
     return await sequelize.transaction(async (t) => {
-      // 1) 세션 OPEN 확인 + order_count 원자 증가(단일 UPDATE)
-      const [updateRes] = await sequelize.query(
+      const [upRes] = await sequelize.query(
         `
         UPDATE order_sessions
            SET order_count = order_count + 1,
@@ -49,42 +25,31 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
                last_active_at   = NOW()
          WHERE id = ?
            AND status = 'OPEN'
-        `,
+      `,
         { replacements: [session.id], transaction: t }
       );
 
-      // MySQL 드라이버별로 반환 형태가 달라 affectedRows 노멀라이즈
       const affected =
-        typeof updateRes?.affectedRows === 'number'
-          ? updateRes.affectedRows
-          : typeof updateRes === 'number'
-            ? updateRes
+        typeof upRes?.affectedRows === 'number'
+          ? upRes.affectedRows
+          : typeof upRes === 'number'
+            ? upRes
             : 0;
-
-      if (!affected) {
+      if (!affected)
         throw new AppError(
           'Invalid or closed session',
           StatusCodes.UNPROCESSABLE_ENTITY
         );
-      }
 
-      // 2) 증가된 최신 order_count/visit_started_at/ table_id 읽기 (FOR UPDATE)
       const [[sesRow]] = await sequelize.query(
         `
         SELECT id, table_id, order_count, visit_started_at
           FROM order_sessions
          WHERE id = ?
          FOR UPDATE
-        `,
+      `,
         { replacements: [session.id], transaction: t }
       );
-
-      if (!sesRow) {
-        throw new AppError(
-          'Session not found',
-          StatusCodes.UNPROCESSABLE_ENTITY
-        );
-      }
 
       const nextSeq = Number(sesRow.order_count);
       const tableId = Number(sesRow.table_id);
@@ -92,7 +57,6 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         ? new Date(sesRow.visit_started_at)
         : new Date();
 
-      // 3) 금액 계산
       let subtotal = 0;
       const lines = [];
       for (const it of items) {
@@ -105,11 +69,9 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
             `invalid product: ${it.product_id}`,
             StatusCodes.BAD_REQUEST
           );
-
         const qty = Number(it.quantity || 0);
         if (qty < 1)
           throw new AppError('quantity >= 1', StatusCodes.BAD_REQUEST);
-
         const unit = Number(p.price);
         const line = Number((unit * qty).toFixed(2));
         subtotal = Number((subtotal + line).toFixed(2));
@@ -121,7 +83,6 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         });
       }
 
-      // 4) 할인
       let discount = 0,
         reason = null;
       if (order_type === 'TAKEOUT') {
@@ -130,12 +91,11 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
       }
       const total = Number((subtotal - discount).toFixed(2));
 
-      // 5) 주문 생성 — ★ order_seq = nextSeq 반드시 세팅
       const order = await Order.create(
         {
           order_session_id: session.id,
           table_id: tableId,
-          order_seq: nextSeq,
+          order_seq: nextSeq, // ← 중요
           payer_name: payer_name || null,
           order_type: order_type || 'DINE_IN',
           status: 'PENDING',
@@ -147,7 +107,6 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         { transaction: t }
       );
 
-      // 6) 라인 아이템
       for (const L of lines) {
         await OrderProduct.create(
           { order_id: order.id, ...L },
