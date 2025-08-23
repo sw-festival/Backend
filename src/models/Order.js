@@ -80,11 +80,11 @@ const Order = sequelize.define(
       { name: 'idx_orders_table_id', fields: ['table_id'] },
       { name: 'idx_orders_status', fields: ['status'] },
       // 세션 내 순번 유일 보장
-      {
-        name: 'uq_orders_session_seq',
-        unique: true,
-        fields: ['order_session_id', 'order_seq'],
-      },
+      // {
+      //   name: 'uq_orders_session_seq',
+      //   unique: true,
+      //   fields: ['order_session_id', 'order_seq'],
+      // },
     ],
   }
 );
