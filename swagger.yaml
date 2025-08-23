@@ -328,6 +328,97 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+    /orders/{id}/status:
+    patch:
+      summary: Update order status by action (admin only)
+      description: >
+        액션 기반 상태 전이.\n
+        - PENDING --confirm--> CONFIRMED (재고 차감)\n
+        - CONFIRMED --start--> IN_PROGRESS\n
+        - IN_PROGRESS --serve--> SERVED\n
+        - PENDING/CONFIRMED --cancel--> CANCELED (확정 후 취소 시 재고 복구)
+      tags: [Admin, Orders]
+      security:
+        - bearerAuth: []  # Authorization: Bearer <JWT>
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+          description: Order ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderStatusUpdateRequest'
+            examples:
+              confirm:
+                summary: Confirm (PENDING -> CONFIRMED)
+                value: { action: confirm, reason: '입금 확인' }
+              start:
+                summary: Start (CONFIRMED -> IN_PROGRESS)
+                value: { action: start }
+              serve:
+                summary: Serve (IN_PROGRESS -> SERVED)
+                value: { action: serve }
+              cancel_from_pending:
+                summary: Cancel from PENDING
+                value: { action: cancel, reason: '고객 취소' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusUpdateResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: Status updated successfully
+                    data: { order_id: 123, prev: PENDING, next: CONFIRMED }
+        '400':
+          description: Bad Request (invalid order id / action missing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidAction:
+                  value: { success: false, message: "action required (one of: confirm, start, serve, cancel)" }
+        '401':
+          description: Unauthorized (missing/invalid admin JWT)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noToken:
+                  value: { success: false, message: 'Invalid or expired token' }
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notfound:
+                  value: { success: false, message: 'order not found' }
+        '409':
+          description: Conflict (invalid transition / out of stock on confirm)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidTransition:
+                  value: { success: false, message: 'invalid transition: PENDING -> (serve)' }
+                outOfStock:
+                  value: { success: false, message: 'out of stock' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
 components:
   schemas:
     Table:
@@ -445,6 +536,30 @@ components:
         message: { type: string, example: order created }
         data:
           $ref: '#/components/schemas/OrderCreateData'
+
+    OrderStatusUpdateRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [confirm, start, serve, cancel]
+        reason:
+          type: string
+          nullable: true
+          example: '입금 확인'
+
+    OrderStatusUpdateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: Status updated successfully }
+        data:
+          type: object
+          properties:
+            order_id: { type: integer, example: 123 }
+            prev:     { type: string, example: PENDING }
+            next:     { type: string, example: CONFIRMED }
 
     SessionOpenData:
       type: object

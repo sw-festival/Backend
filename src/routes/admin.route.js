@@ -9,4 +9,6 @@ router.post('/tables/:id/qr/update', adminController.rotateQrToken);
 
 router.post('/login', adminController.login);
 
+// router.patch('/transition');
+
 module.exports = router;
