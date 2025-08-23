@@ -162,7 +162,6 @@ exports.openBySlugWithCode = async ({ slug, code }) => {
           table_id: table.id,
           session_token: makeRandomToken(),
           status: 'OPEN',
-          visit_started_at: now,
           last_active_at: now,
           active_flag: 1,
         },
@@ -178,7 +177,7 @@ exports.openBySlugWithCode = async ({ slug, code }) => {
         session_token: ses.session_token,
         table: { id: table.id, label: table.label, slug: table.slug },
         abs_ttl_min: Number(process.env.SESSION_ABS_TTL_MIN || 120),
-        idle_ttl_min: Number(process.env.SESSION_IDLE_TTL_MIN || 30),
+        idle_ttl_min: Number(process.env.SESSION_IDLE_TTL_MIN || 120),
       };
     });
   });
