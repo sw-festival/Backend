@@ -5,7 +5,7 @@ const adminController = require('../controllers/admin.controller');
 
 router.post('/tables/ensure', adminController.ensureTableByLabel);
 
-router.post('/tables/:id/qr/update', adminController.rotateQrToken);
+// router.post('/tables/:id/qr/update', adminController.rotateQrToken); deptrecated
 
 router.post('/login', adminController.login);
 

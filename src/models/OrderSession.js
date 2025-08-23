@@ -21,6 +21,10 @@ const OrderSession = sequelize.define(
       allowNull: false,
       defaultValue: 'OPEN',
     },
+
+    // 방문 시작 시각(세션 생성 시 기록)
+    visit_started_at: { type: DataTypes.DATE, allowNull: true },
+
     last_active_at: { type: DataTypes.DATE, allowNull: true },
     // 동시 스캔 방지: OPEN=1, CLOSED/EXPIRED=0 → (table_id, active_flag) UNIQUE
     active_flag: { type: DataTypes.TINYINT, allowNull: false, defaultValue: 1 },

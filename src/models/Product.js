@@ -12,7 +12,7 @@ const Product = sequelize.define(
     name: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      unique: true,
+
       comment: '메뉴명',
     },
     price: {
@@ -47,7 +47,10 @@ const Product = sequelize.define(
   },
   {
     tableName: 'products',
-    indexes: [{ fields: ['is_active'] }, { fields: ['name'] }],
+    indexes: [
+      { name: 'uq_products_name', unique: true, fields: ['name'] },
+      { name: 'idx_products_is_active', fields: ['is_active'] },
+    ],
   }
 );
 
