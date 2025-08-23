@@ -239,6 +239,186 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+
+  /orders:
+    post:
+      summary: Create an order (session required)
+      description: Create a new order with line items. Uses session token from QR flow. TAKEOUT applies 10% discount.
+      tags: [Public]
+      parameters:
+        - in: header
+          name: x-session-token
+          required: false
+          schema: { type: string }
+          description: Session token (preferred). Alternatively use `Authorization: Session <token>`.
+        - in: header
+          name: Authorization
+          required: false
+          schema: { type: string, example: "Session 4e6d...ab" }
+          description: Alternative header if `x-session-token` is not used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+            examples:
+              dine_in:
+                summary: DINE_IN example
+                value:
+                  order_type: DINE_IN
+                  payer_name: 임승우
+                  items:
+                    - { product_id: 1, quantity: 2 }
+                    - { product_id: 3, quantity: 1 }
+              takeout:
+                summary: TAKEOUT example (10% off)
+                value:
+                  order_type: TAKEOUT
+                  payer_name: 임승우
+                  items:
+                    - { product_id: 2, quantity: 1 }
+                    - { product_id: 5, quantity: 3 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreateResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: order created
+                    data:
+                      order_id: 123
+                      order_type: DINE_IN
+                      status: PENDING
+                      subtotal_amount: 22000.00
+                      discount_amount: 0.00
+                      total_amount: 22000.00
+        '400':
+          description: Bad Request (invalid items, quantity < 1, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidItems:
+                  value: { success: false, message: 'items required' }
+        '401':
+          description: Unauthorized (missing/invalid session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noSession:
+                  value: { success: false, message: 'No session token' }
+        '409':
+          description: Conflict (out of stock, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                conflict:
+                  value: { success: false, message: 'out of stock' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    /orders/{id}/status:
+    patch:
+      summary: Update order status by action (admin only)
+      description: >
+        액션 기반 상태 전이.\n
+        - PENDING --confirm--> CONFIRMED (재고 차감)\n
+        - CONFIRMED --start--> IN_PROGRESS\n
+        - IN_PROGRESS --serve--> SERVED\n
+        - PENDING/CONFIRMED --cancel--> CANCELED (확정 후 취소 시 재고 복구)
+      tags: [Admin, Orders]
+      security:
+        - bearerAuth: []  # Authorization: Bearer <JWT>
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+          description: Order ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderStatusUpdateRequest'
+            examples:
+              confirm:
+                summary: Confirm (PENDING -> CONFIRMED)
+                value: { action: confirm, reason: '입금 확인' }
+              start:
+                summary: Start (CONFIRMED -> IN_PROGRESS)
+                value: { action: start }
+              serve:
+                summary: Serve (IN_PROGRESS -> SERVED)
+                value: { action: serve }
+              cancel_from_pending:
+                summary: Cancel from PENDING
+                value: { action: cancel, reason: '고객 취소' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusUpdateResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+                    message: Status updated successfully
+                    data: { order_id: 123, prev: PENDING, next: CONFIRMED }
+        '400':
+          description: Bad Request (invalid order id / action missing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidAction:
+                  value: { success: false, message: "action required (one of: confirm, start, serve, cancel)" }
+        '401':
+          description: Unauthorized (missing/invalid admin JWT)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noToken:
+                  value: { success: false, message: 'Invalid or expired token' }
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notfound:
+                  value: { success: false, message: 'order not found' }
+        '409':
+          description: Conflict (invalid transition / out of stock on confirm)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidTransition:
+                  value: { success: false, message: 'invalid transition: PENDING -> (serve)' }
+                outOfStock:
+                  value: { success: false, message: 'out of stock' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
 components:
   schemas:
     Table:
@@ -312,6 +492,74 @@ components:
           type: string
           description: 'JWT. Use as Authorization: Bearer <token>'
           example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+
+    
+    OrderItemInput:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: { type: integer, example: 1, minimum: 1 }
+        quantity:   { type: integer, example: 2, minimum: 1 }
+
+    OrderCreateRequest:
+      type: object
+      required: [items]
+      properties:
+        order_type:
+          type: string
+          enum: [DINE_IN, TAKEOUT]
+          default: DINE_IN
+        payer_name:
+          type: string
+          nullable: true
+          example: 임승우
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItemInput'
+
+    OrderCreateData:
+      type: object
+      properties:
+        order_id:        { type: integer, example: 123 }
+        order_type:      { type: string, example: DINE_IN }
+        status:          { type: string, example: PENDING }
+        subtotal_amount: { type: number, format: float, example: 22000.00 }
+        discount_amount: { type: number, format: float, example: 0.00 }
+        total_amount:    { type: number, format: float, example: 22000.00 }
+
+    OrderCreateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: order created }
+        data:
+          $ref: '#/components/schemas/OrderCreateData'
+
+    OrderStatusUpdateRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [confirm, start, serve, cancel]
+        reason:
+          type: string
+          nullable: true
+          example: '입금 확인'
+
+    OrderStatusUpdateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: Status updated successfully }
+        data:
+          type: object
+          properties:
+            order_id: { type: integer, example: 123 }
+            prev:     { type: string, example: PENDING }
+            next:     { type: string, example: CONFIRMED }
 
     SessionOpenData:
       type: object
