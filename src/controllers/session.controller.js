@@ -25,7 +25,7 @@ exports.openBySlugWithCode = async (req, res, next) => {
   try {
     const { slug, code } = req.body || {};
     const data = await sessionService.openBySlugWithCode({ slug, code });
-    res.status(StatusCodes.OK).json({
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'session opened (global code verified)',
       data,
