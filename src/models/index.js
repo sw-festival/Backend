@@ -39,6 +39,11 @@ OrderProduct.belongsTo(Product, {
 });
 Product.hasMany(OrderProduct, { foreignKey: 'product_id' });
 
+DiningTable.belongsTo(OrderSession, {
+  as: 'currentSession',
+  foreignKey: 'current_session_id',
+});
+
 // 세션/토큰 ←→ 테이블
 OrderSession.belongsTo(DiningTable, {
   foreignKey: { name: 'table_id', allowNull: false },

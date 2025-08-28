@@ -1,3 +1,4 @@
+// src/models/Order.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../../config/database');
 
@@ -10,14 +11,12 @@ const Order = sequelize.define(
       primaryKey: true,
     },
 
-    // 세션 스냅샷 (필수)
     order_session_id: {
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false,
       comment: '주문이 생성된 OrderSession',
     },
 
-    // 테이블 스냅샷 (기존 운영 편의 때문에 유지, 세션과 동일하게 세팅)
     table_id: {
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false,
@@ -29,16 +28,25 @@ const Order = sequelize.define(
       allowNull: true,
       comment: '입금자명',
     },
+
     order_type: {
       type: DataTypes.ENUM('DINE_IN', 'TAKEOUT'),
       allowNull: false,
       defaultValue: 'DINE_IN',
       comment: '주문 유형(매장/포장)',
     },
+
+    // + 세션 내 순번
+    order_seq: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      comment: '세션 내 n번째 주문(1부터 시작)',
+    },
+
     status: {
       type: DataTypes.ENUM(
-        'PENDING', // 입금 대기
-        'CONFIRMED', // 입금 확인 후 주문 수락
+        'PENDING',
+        'CONFIRMED',
         'IN_PROGRESS',
         'SERVED',
         'CANCELED'
@@ -63,16 +71,20 @@ const Order = sequelize.define(
       defaultValue: 0,
       comment: '주문총액',
     },
-
     discount_reason: { type: DataTypes.STRING(64), allowNull: true }, // ex) TAKEOUT_10_OFF
   },
   {
     tableName: 'orders',
     indexes: [
-      { fields: ['order_session_id'] },
-      { fields: ['table_id'] },
-      { fields: ['order_type'] },
-      { fields: ['status'] },
+      { name: 'idx_orders_order_session_id', fields: ['order_session_id'] },
+      { name: 'idx_orders_table_id', fields: ['table_id'] },
+      { name: 'idx_orders_status', fields: ['status'] },
+      // 세션 내 순번 유일 보장
+      // {
+      //   name: 'uq_orders_session_seq',
+      //   unique: true,
+      //   fields: ['order_session_id', 'order_seq'],
+      // },
     ],
   }
 );

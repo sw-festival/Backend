@@ -1,57 +1,53 @@
+// src/middlewares/sessionAuth.js
 const { StatusCodes } = require('http-status-codes');
-const OrderSession = require('../models/OrderSession');
+const { OrderSession, DiningTable } = require('../models');
 
 module.exports = async (req, res, next) => {
   try {
-    // 토큰 추출: X-Session-Token 우선, 없으면 Authorization 지원
-    const raw =
-      req.headers['x-session-token'] || req.headers.authorization || '';
-    let token = raw.trim();
-
-    // Authorization: Session <token> 패턴만 처리 (필요시 Bearer 등 추가)
-    if (/^Session\s+/i.test(token))
-      token = token.replace(/^Session\s+/i, '').trim();
+    const token =
+      req.headers['x-session-token'] ||
+      (req.headers.authorization || '').replace(/^Session\s+/i, '');
 
     if (!token) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({
-        success: false,
-        message: 'No session token',
-      });
+      return res
+        .status(StatusCodes.UNAUTHORIZED)
+        .json({ success: false, message: 'No session token' });
     }
 
     const ses = await OrderSession.findOne({
       where: { session_token: token, status: 'OPEN' },
     });
     if (!ses) {
-      return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({
-        success: false,
-        message: 'invalid or closed session',
-      });
+      return res
+        .status(StatusCodes.UNPROCESSABLE_ENTITY)
+        .json({ success: false, message: 'Invalid or closed session' });
     }
 
-    // TTL 검사
-    const now = new Date();
-    const absTTL = Number(process.env.SESSION_ABS_TTL_MIN || 120);
-    const idleTTL = Number(process.env.SESSION_IDLE_TTL_MIN || 30);
-
-    const createdAt = ses.createdAt || ses.getDataValue('createdAt');
-    const lastActive = ses.last_active_at || createdAt;
-
-    const ms = (m) => m * 60 * 1000;
-    if (now - createdAt > ms(absTTL) || now - lastActive > ms(idleTTL)) {
-      ses.status = 'EXPIRED';
-      ses.active_flag = 0;
-      await ses.save();
-      return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({
-        success: false,
-        message: 'token expired',
-      });
+    // 현재 테이블의 활성 세션인지 확인 (예전 토큰 차단 핵심)
+    const table = await DiningTable.findByPk(ses.table_id, {
+      attributes: ['id', 'current_session_id'],
+    });
+    if (!table || table.current_session_id !== ses.id) {
+      return res
+        .status(StatusCodes.UNPROCESSABLE_ENTITY)
+        .json({ success: false, message: 'session superseded' });
     }
 
-    // 통과: 활동 갱신
-    ses.last_active_at = now;
-    await ses.save();
+    // TTL 체크 (있으면)
+    const now = Date.now();
+    const createdAt = ses.createdAt?.getTime?.() ?? now;
+    const lastActive = ses.last_active_at?.getTime?.() ?? createdAt;
+    const absTTL = Number(process.env.SESSION_ABS_TTL_MIN || 120) * 60 * 1000;
+    const idleTTL = Number(process.env.SESSION_IDLE_TTL_MIN || 30) * 60 * 1000;
 
+    if (now - createdAt > absTTL || now - lastActive > idleTTL) {
+      await ses.update({ status: 'EXPIRED', active_flag: 0 });
+      return res
+        .status(StatusCodes.UNPROCESSABLE_ENTITY)
+        .json({ success: false, message: 'token expired' });
+    }
+
+    await ses.update({ last_active_at: new Date() });
     req.orderSession = ses;
     next();
   } catch (err) {

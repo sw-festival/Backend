@@ -1,6 +1,7 @@
 const { StatusCodes } = require('http-status-codes');
 const AppError = require('../errors/AppError');
 const sessionService = require('../services/session.service');
+const { DiningTable } = require('../models');
 
 exports.openSessionByToken = async (req, res, next) => {
   try {
@@ -14,6 +15,20 @@ exports.openSessionByToken = async (req, res, next) => {
       success: true,
       message: 'session opened',
       data: out,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.openBySlugWithCode = async (req, res, next) => {
+  try {
+    const { slug, code } = req.body || {};
+    const data = await sessionService.openBySlugWithCode({ slug, code });
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'session opened (global code verified)',
+      data,
     });
   } catch (err) {
     next(err);

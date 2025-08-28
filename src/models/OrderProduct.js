@@ -1,3 +1,4 @@
+// src/models/OrderProduct.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../../config/database');
 
@@ -9,24 +10,21 @@ const OrderProduct = sequelize.define(
       autoIncrement: true,
       primaryKey: true,
     },
+
     order_id: {
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false,
-      references: {
-        model: 'orders', // 참조 테이블명
-        key: 'id',
-      },
+      references: { model: 'orders', key: 'id' },
       onDelete: 'CASCADE',
     },
+
     product_id: {
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false,
-      references: {
-        model: 'products', // 참조 테이블명
-        key: 'id',
-      },
+      references: { model: 'products', key: 'id' },
       onDelete: 'CASCADE',
     },
+
     quantity: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
@@ -39,10 +37,9 @@ const OrderProduct = sequelize.define(
   {
     tableName: 'order_products',
     indexes: [
-      { fields: ['order_id'] },
-      { fields: ['product_id'] },
-      // 중복 라인 방지하려면 다음을 활성화
-      // { unique: true, fields: ['order_id', 'product_id'] },
+      { name: 'idx_order_products_order', fields: ['order_id'] },
+      { name: 'idx_order_products_product', fields: ['product_id'] },
+      // { name: 'uq_order_products_order_product', unique: true, fields: ['order_id', 'product_id'] },
     ],
     hooks: {
       beforeValidate(item) {
