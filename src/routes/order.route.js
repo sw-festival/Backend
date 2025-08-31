@@ -10,4 +10,6 @@ router.patch('/:id/status', adminAuth, orderController.updateOrderStatus);
 
 router.get('/active', adminAuth, orderController.getActiveOrders);
 
+router.get('/admin:id', adminAuth, orderController.getOrderDetail);
+
 module.exports = router;
