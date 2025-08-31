@@ -1,5 +1,6 @@
 const { StatusCodes } = require('http-status-codes');
 const orderService = require('../services/order.service');
+const { toDetailDTO } = require('../dtos/order.dto');
 const AppError = require('../errors/AppError');
 
 const URGENT_MIN = 15;
@@ -146,7 +147,7 @@ exports.getOrderDetail = async (req, res, next) => {
     return res.status(StatusCodes.OK).json({
       success: true,
       message: 'order details retrieved successfully',
-      data: details,
+      data: toDetailDTO(details),
     });
   } catch (err) {
     next(err);

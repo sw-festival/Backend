@@ -212,3 +212,28 @@ exports.getActiveOrders = async () => {
     throw err;
   }
 };
+
+exports.getOrderDetail = async (orderId) => {
+  try {
+    return await Order.findByPk(orderId, {
+      include: [
+        { model: DiningTable, attributes: ['id', 'label'] },
+        {
+          model: OrderProduct,
+          as: 'items',
+          attributes: [
+            'id',
+            'product_id',
+            'quantity',
+            'unit_price',
+            'line_total',
+          ],
+          include: [{ model: Product, attributes: ['id', 'name'] }],
+        },
+      ],
+    });
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
+};
