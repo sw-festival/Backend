@@ -137,6 +137,30 @@ exports.getActiveOrders = async (req, res, next) => {
 
 exports.getOrderDetail = async (req, res, next) => {
   try {
+    const id = req.params.id;
+    const details = await orderService.getOrderDetail(id);
+    if (!details)
+      return res
+        .status(StatusCodes.NOT_FOUND)
+        .json({ success: false, message: 'order not found' });
+    if (details.order_session_id !== req.orderSession.id) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: 'forbidden',
+      });
+    }
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'order details retrieved successfully',
+      data: toDetailDTO(details),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getOrderDetailAdmin = async (req, res, next) => {
+  try {
     const id = Number(req.params.id);
     const details = await orderService.getOrderDetail(id);
     if (!details)
