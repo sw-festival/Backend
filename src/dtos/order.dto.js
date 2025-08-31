@@ -24,3 +24,32 @@ exports.toDetailDTO = (o) => {
     })),
   };
 };
+
+function pickAnchor(order) {
+  // Sequelize underscored 옵션에 따라 접근 방식이 다를 수 있어 안전하게 getDataValue 사용
+  const get = (k) =>
+    typeof order.getDataValue === 'function' ? order.getDataValue(k) : order[k];
+  return get('started_at') || get('confirmed_at') || get('created_at');
+}
+
+exports.toCardDTO = (order, nowMs) => {
+  const anchor = new Date(pickAnchor(order));
+  const ageMin = Math.max(0, Math.floor((nowMs - anchor.getTime()) / 60000));
+
+  // DiningTable 포함: include에 [{ model: DiningTable, attributes: ['label'] }]
+  const tableLabel =
+    order.DiningTable?.label ??
+    (typeof order.get === 'function'
+      ? order.get('DiningTable')?.label
+      : undefined) ??
+    null;
+
+  return {
+    id: order.id,
+    status: order.status, // 'CONFIRMED' | 'IN_PROGRESS'
+    table: tableLabel, // 테이블명
+    payer_name: order.payer_name ?? null,
+    age_min: ageMin, // 경과 분
+    placed_at: anchor.toISOString(), // "n분 전" 표시용
+  };
+};
