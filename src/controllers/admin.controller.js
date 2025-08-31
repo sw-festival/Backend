@@ -1,7 +1,7 @@
 const { StatusCodes } = require('http-status-codes');
 const adminService = require('../services/admin.service');
 
-exports.ensureTableByLabel = async (req, res) => {
+exports.ensureTableByLabel = async (req, res, next) => {
   try {
     const { label, active = true } = req.body || {};
     if (!label || typeof label !== 'string') {

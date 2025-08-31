@@ -1,10 +1,12 @@
 const { StatusCodes } = require('http-status-codes');
+const { Op } = require('sequelize');
 const AppError = require('../errors/AppError');
 const {
   sequelize,
   Order,
   OrderProduct,
   Product,
+  DiningTable,
   OrderSession,
 } = require('../models');
 const { withRetry } = require('../utils/retry');
@@ -188,4 +190,50 @@ exports.updateOrderStatus = async ({ id, action, reason, admin }) => {
 
     return { order_id: id, prev, next };
   });
+};
+
+exports.getActiveOrders = async () => {
+  try {
+    return await Order.findAll({
+      where: { status: { [Op.in]: ['CONFIRMED', 'IN_PROGRESS'] } },
+      attributes: [
+        'id',
+        'order_session_id',
+        'table_id',
+        'payer_name',
+        'status',
+        'created_at',
+      ],
+      include: [{ model: DiningTable, attributes: ['label'] }],
+      order: [['id', 'DESC']],
+    });
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
+};
+
+exports.getOrderDetail = async (orderId) => {
+  try {
+    return await Order.findByPk(orderId, {
+      include: [
+        { model: DiningTable, attributes: ['id', 'label'] },
+        {
+          model: OrderProduct,
+          as: 'items',
+          attributes: [
+            'id',
+            'product_id',
+            'quantity',
+            'unit_price',
+            'line_total',
+          ],
+          include: [{ model: Product, attributes: ['id', 'name'] }],
+        },
+      ],
+    });
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
 };
