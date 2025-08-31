@@ -61,3 +61,17 @@ exports.updateOrderStatus = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getActiveOrders = async (req, res, next) => {
+  try {
+    const orders = await orderService.getActiveOrders();
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Active orders retrieved successfully',
+      data: orders,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

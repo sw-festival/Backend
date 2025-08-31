@@ -8,6 +8,6 @@ router.post('/', sessionAuth, orderController.createOrder);
 
 router.patch('/:id/status', adminAuth, orderController.updateOrderStatus);
 
-router.get('/', adminAuth, orderController.getOrdersForKitchen);
+router.get('/active', adminAuth, orderController.getOrdersForKitchen);
 
 module.exports = router;
