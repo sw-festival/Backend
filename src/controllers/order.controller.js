@@ -133,3 +133,22 @@ exports.getActiveOrders = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getOrderDetail = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const details = await orderService.getOrderDetail(id);
+    if (!details)
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'order not found',
+      });
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'order details retrieved successfully',
+      data: details,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
