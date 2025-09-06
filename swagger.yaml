@@ -15,7 +15,7 @@ paths:
         관리자가 테이블 라벨(label)을 지정하면, 해당 라벨에 해당하는 테이블을 찾아 존재하지 않으면 새로 생성하고,  
         이미 존재하면 기존 테이블을 반환한다.  
         반환되는 데이터에는 **QR 코드 URL에 붙일 수 있는 암호화된 slug 값**이 포함된다.
-      tags: [Admin]
+      tags: [ Admin ]
       responses:
         '201':
           description: Created (table newly created)
@@ -39,7 +39,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [label]
+              required: [ label ]
               properties:
                 label:
                   type: string
@@ -55,9 +55,9 @@ paths:
         특정 테이블에서 열린 세션이 정상적으로 종료되지 않았거나 **세션 상태가 꼬였을 때**,  
         관리자가 세션 ID를 지정하여 해당 세션을 강제로 종료할 수 있다.  
         정상적으로 종료되면 세션 상태는 닫힘으로 업데이트된다.
-      tags: [Admin]
+      tags: [ Admin ]
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
       parameters:
         - in: path
           name: id
@@ -92,7 +92,7 @@ paths:
         관리자가 사전에 설정된 **PIN 번호**를 입력하여 로그인하면,  
         인증 성공 시 JWT 토큰이 발급된다.  
         이 토큰은 이후 관리자 전용 API 호출 시 `Authorization: Bearer <JWT>` 헤더에 포함하여 사용할 수 있다.
-      tags: [Admin]
+      tags: [ Admin ]
       responses:
         '200':
           description: Login successful (JWT issued)
@@ -127,7 +127,7 @@ paths:
       description: >
         관리자가 발급한 글로벌 코드(`SESSION_OPEN_CODE`)와 테이블 slug로 세션을 강제로 여는 API로,
         기존 열려 있는 세션이 있으면 모두 만료(EXPIRED) 처리 후 새로운 세션을 생성한다.
-      tags: [Public]
+      tags: [ Public ]
       responses:
         '200':
           description: Session opened successfully
@@ -167,7 +167,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [slug, code]
+              required: [ slug, code ]
               properties:
                 slug:
                   type: string
@@ -179,11 +179,11 @@ paths:
   /orders:
     post:
       summary: Create an order (session required)
-      tags: [Public]
+      tags: [ Public ]
       # 세션 토큰 두 방식 중 하나로 인증: Authorization: Session <token> 또는 x-session-token
       security:
-        - sessionAuth: []
-        - xSessionTokenAuth: []
+        - sessionAuth: [ ]
+        - xSessionTokenAuth: [ ]
       responses:
         '201':
           description: Created
@@ -221,9 +221,9 @@ paths:
   /orders/{id}/status:
     patch:
       summary: 관리자가 주문의 상태를 업데이트할 때 사용된다.
-      tags: [Admin]
+      tags: [ Admin ]
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
       parameters:
         - in: path
           name: id
@@ -277,9 +277,9 @@ paths:
         - **대기중(waiting)**: CONFIRMED  
         - **준비중(preparing)**: IN_PROGRESS  
         - 정렬: 각 버킷 내 "경과분(age_min)" 내림차순(오래된 순)
-      tags: [Admin]
+      tags: [ Admin ]
       security:
-        - bearerAuth: []   # Authorization: Bearer <JWT>
+        - bearerAuth: [ ]   # Authorization: Bearer <JWT>
       responses:
         '200':
           description: OK
@@ -298,10 +298,10 @@ paths:
       description: |
         세션 토큰으로 인증된 **본인 세션의 주문**만 조회됩니다.  
         - 세션 토큰은 `Authorization: Session <token>` 또는 `x-session-token` 헤더로 전달하세요.
-      tags: [Public, Orders]
+      tags: [ Public, Orders ]
       security:
-        - sessionAuth: []       # Authorization: Session <token>
-        - xSessionTokenAuth: [] # 또는 x-session-token
+        - sessionAuth: [ ]       # Authorization: Session <token>
+        - xSessionTokenAuth: [ ] # 또는 x-session-token
       parameters:
         - in: path
           name: id
@@ -336,9 +336,9 @@ paths:
     get:
       summary: (관리자) 주문 상세 조회
       description: 관리자 권한으로 특정 주문의 상세 정보를 조회합니다.
-      tags: [Admin, Orders]
+      tags: [ Admin, Orders ]
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
       parameters:
         - in: path
           name: id
@@ -359,13 +359,94 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /menu:
+    get:
+      summary: (공용) 전체 메뉴 조회
+      description: |
+        - 공개용 메뉴 목록을 반환합니다.
+        - 응답에는 `is_sold_out`이 포함되며, **재고(stock)는 노출되지 않습니다.**
+      tags: [ Public, Menu ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: menu returned successfully }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MenuPublicItem' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /menu/admin:
+    get:
+      summary: (관리자) 전체 메뉴 조회
+      description: |
+        - 관리자용 메뉴 목록을 반환합니다.
+        - 응답에는 `stock` 및 `is_sold_out`이 포함됩니다.
+      tags: [ Admin, Menu ]
+      security:
+        - bearerAuth: [ ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: menu returned successfully }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MenuAdminItem' }
+        '401':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /menu/top:
+    get:
+      summary: (공용) 인기 메뉴 Top N
+      description: |
+        - 금일(행사일 기준) 판매 집계를 기반으로 **메인/사이드만** 상위 N개 인기 메뉴를 반환합니다.
+        - 정렬 우선순위: 판매수량(`qty_sold`) 내림차순 → 매출합계(`amount_sold`) 내림차순.
+        - 쿼리 파라미터 `count`가 없으면 기본 3개를 반환합니다.
+      tags: [ Public, Menu ]
+      parameters:
+        - in: query
+          name: count
+          required: false
+          schema: { type: integer, minimum: 1, default: 3 }
+          description: 상위 N개 개수(기본 3)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: menu returned successfully }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PopularMenuItem' }
+        '500':
+          $ref: '#/components/responses/ServerError'
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: 관리자 JWT. 예) Authorization: Bearer <JWT>
+      description:
+        관리자 JWT. 예) Authorization: Bearer <JWT>
     sessionAuth:
       type: apiKey
       in: header
@@ -380,6 +461,40 @@ components:
       description: 사용자 세션 토큰(대안 헤더)
 
   schemas:
+    # ===== 메뉴 =====
+    MenuType:
+      type: string
+      enum: [ MAIN, SIDE, DRINK ]
+      example: MAIN
+
+    MenuPublicItem:
+      type: object
+      properties:
+        id: { type: integer, example: 7 }
+        name: { type: string,  example: 김치전 }
+        price: { type: number,  format: float, example: 6000 }
+        image_url: { type: string,  nullable: true, example: null }
+        description: { type: string,  nullable: true, example: 바삭하고 매콤한 김치전 }
+        type: { $ref: '#/components/schemas/MenuType' }
+        is_sold_out: { type: boolean, example: false }
+
+    MenuAdminItem:
+      allOf:
+        - $ref: '#/components/schemas/MenuPublicItem'
+        - type: object
+          properties:
+            stock: { type: integer, example: 24 }
+
+    PopularMenuItem:
+      type: object
+      properties:
+        id: { type: integer, example: 3 }
+        name: { type: string,  example: 오징어볶음 }
+        image_url: { type: string,  nullable: true, example: null }
+        description: { type: string,  nullable: true, example: 매콤한 양념의 오징어볶음 }
+        qty_sold: { type: integer, example: 9 }
+        amount_sold: { type: number,  format: float, example: 72000.00 }
+
     Table:
       type: object
       properties:
@@ -409,7 +524,7 @@ components:
 
     AdminLoginRequest:
       type: object
-      required: [pin]
+      required: [ pin ]
       properties:
         pin: { type: string, example: '2025' }
 
@@ -422,18 +537,18 @@ components:
 
     OrderItemInput:
       type: object
-      required: [product_id, quantity]
+      required: [ product_id, quantity ]
       properties:
         product_id: { type: integer, example: 1 }
         quantity: { type: integer, example: 2 }
 
     OrderCreateRequest:
       type: object
-      required: [items]
+      required: [ items ]
       properties:
         order_type:
           type: string
-          enum: [DINE_IN, TAKEOUT]
+          enum: [ DINE_IN, TAKEOUT ]
         payer_name:
           type: string
         items:
@@ -461,9 +576,9 @@ components:
 
     OrderStatusUpdateRequest:
       type: object
-      required: [action]
+      required: [ action ]
       properties:
-        action: { type: string, enum: [confirm, start, serve, cancel] }
+        action: { type: string, enum: [ confirm, start, serve, cancel ] }
         reason: { type: string }
 
     OrderStatusUpdateResponse:
@@ -512,15 +627,15 @@ components:
     OrderCard:
       type: object
       properties:
-        id:          { type: integer, example: 318 }
+        id: { type: integer, example: 318 }
         status:
           type: string
-          enum: [CONFIRMED, IN_PROGRESS]
+          enum: [ CONFIRMED, IN_PROGRESS ]
           example: IN_PROGRESS
-        table:       { type: string, nullable: true, example: A-10 }
-        payer_name:  { type: string, nullable: true, example: 임승우 }
-        age_min:     { type: integer, example: 8 }
-        placed_at:   { type: string, format: date-time, example: '2025-08-29T12:22:00.000Z' }
+        table: { type: string, nullable: true, example: A-10 }
+        payer_name: { type: string, nullable: true, example: 임승우 }
+        age_min: { type: integer, example: 8 }
+        placed_at: { type: string, format: date-time, example: '2025-08-29T12:22:00.000Z' }
 
     ActiveOrdersGroupedData:
       type: object
@@ -545,36 +660,36 @@ components:
         meta:
           type: object
           properties:
-            now:           { type: string, format: date-time, example: '2025-08-29T12:38:40.000Z' }
+            now: { type: string, format: date-time, example: '2025-08-29T12:38:40.000Z' }
             threshold_min: { type: integer, example: 15 }
             counts:
               type: object
               properties:
-                urgent:    { type: integer, example: 1 }
-                waiting:   { type: integer, example: 1 }
+                urgent: { type: integer, example: 1 }
+                waiting: { type: integer, example: 1 }
                 preparing: { type: integer, example: 1 }
             total: { type: integer, example: 3 }
 
     OrderDetailItem:
       type: object
       properties:
-        id:          { type: integer, example: 1 }
-        product_id:  { type: integer, example: 5 }
-        name:        { type: string,  example: 맥주 }
-        qty:         { type: integer, example: 2 }
-        unit_price:  { type: number,  format: float, example: 3000 }
-        line_total:  { type: number,  format: float, example: 6000 }
+        id: { type: integer, example: 1 }
+        product_id: { type: integer, example: 5 }
+        name: { type: string,  example: 맥주 }
+        qty: { type: integer, example: 2 }
+        unit_price: { type: number,  format: float, example: 3000 }
+        line_total: { type: number,  format: float, example: 6000 }
 
     OrderDetailData:
       type: object
       properties:
-        id:         { type: integer, example: 123 }
-        status:     { type: string, example: CONFIRMED }
+        id: { type: integer, example: 123 }
+        status: { type: string, example: CONFIRMED }
         table:
           type: object
           nullable: true
           properties:
-            id:    { type: integer, example: 7 }
+            id: { type: integer, example: 7 }
             label: { type: string,  example: A-10 }
         payer_name: { type: string, example: 임승우 }
         amounts:
@@ -582,7 +697,7 @@ components:
           properties:
             subtotal: { type: number, format: float, example: 22000 }
             discount: { type: number, format: float, example: 0 }
-            total:    { type: number, format: float, example: 22000 }
+            total: { type: number, format: float, example: 22000 }
         created_at: { type: string, format: date-time, example: '2025-08-29T12:00:00.000Z' }
         items:
           type: array
