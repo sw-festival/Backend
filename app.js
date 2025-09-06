@@ -101,6 +101,7 @@ const { initDB } = require('./src/models/bootstrap');
 const adminRouter = require('./src/routes/admin.route');
 const sessionRouter = require('./src/routes/session.route');
 const orderRouter = require('./src/routes/order.route');
+const menuRouter = require('./src/routes/menu.route');
 
 (async () => {
   await initDB({ alter: true }); // 개발 중만 alter, 운영은 안전하게 마이그레이션 권장
@@ -109,6 +110,7 @@ const orderRouter = require('./src/routes/order.route');
 app.use('/api/admin', adminRouter);
 app.use('/api/sessions', sessionRouter);
 app.use('/api/orders', orderRouter);
+app.use('/api/menu', menuRouter);
 
 // ===== 에러 핸들러 =====
 const errorHandler = require('./src/middlewares/errorHandler');
