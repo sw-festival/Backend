@@ -39,3 +39,24 @@ exports.getMenuAdmin = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getPopularMenu = async (req, res, next) => {
+  try {
+    const count  = Number(req.query.count) || 3;
+    const topMenus = await menuService.getPopularMenu({ count });
+    if (topMenus.length === 0)
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: 'there is no popular menu',
+        data: [],
+      });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'menu returned successfully',
+      data: topMenus,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

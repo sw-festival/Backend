@@ -8,4 +8,6 @@ router.get('/', menuController.getMenuPublic);
 
 router.get('/admin', adminAuth, menuController.getMenuAdmin);
 
+router.get('/top', menuController.getPopularMenu);
+
 module.exports = router;
