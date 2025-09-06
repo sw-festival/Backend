@@ -4,8 +4,8 @@ const { Op, fn, col, literal } = require('sequelize');
 exports.getAllMenu = async ({ public: isPublic } = {}) => {
   try {
     const attrs = isPublic
-      ? ['id', 'name', 'price', 'image_url', 'description', 'stock'] // stock 포함
-      : ['id', 'name', 'price', 'image_url', 'description', 'stock'];
+      ? ['id', 'name', 'price', 'image_url', 'description', 'stock', 'type'] // stock 포함
+      : ['id', 'name', 'price', 'image_url', 'description', 'stock', 'type'];
 
     const menus = await Product.findAll({ attributes: attrs });
 
