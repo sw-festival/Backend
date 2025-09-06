@@ -75,6 +75,7 @@ exports.getPopularMenu = async ({ count }) => {
           model: Product,
           attributes: ['id', 'name', 'image_url', 'description'],
           required: true,
+          where: { type: ['MAIN', 'SIDE'] },
         },
       ],
       group: [
