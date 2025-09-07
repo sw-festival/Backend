@@ -8,6 +8,58 @@ servers:
     description: Local dev
 
 paths:
+  /sse/orders/stream:
+    get:
+      summary: (관리자) 실시간 주문 스트림 (SSE)
+      description: |
+        **Server-Sent Events (text/event-stream)**로 실시간 주문 변동을 push합니다.
+        - 관리자 로그인 시 연결하면 됩니다.
+        - 최초 연결 시 `snapshot` 이벤트로 현재 진행중 주문 버킷(urgent/waiting/preparing)을 전달
+        - 이후 주문 생성/상태변경 시 `orders_changed` 등의 이벤트로 갱신 알림
+        - 주기적 `ping` 이벤트로 연결 유지
+
+        ### 이벤트 형식 예시
+        ```
+        event: snapshot
+        data: {"data":{"urgent":[],"waiting":[...],"preparing":[...]}, "meta":{"now":"2025-09-07T08:57:07.602Z","counts":{"urgent":0,"waiting":2,"preparing":2},"total":4}}
+
+        event: orders_changed
+        data: {"type":"created","order_id":7}
+
+        event: ping
+        data: "pong"
+        ```
+
+        ### 테스트 (cURL)
+        ```
+        curl -N \
+          -H "Accept: text/event-stream" \
+          -H "Authorization: Bearer <관리자JWT>" \
+          http://localhost:3000/api/sse/orders/stream
+        ```
+      tags: [ Admin, SSE ]
+      security:
+        - bearerAuth: [ ]
+      responses:
+        '200':
+          description: Stream opened (text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  : connected
+
+                  event: snapshot
+                  data: {"data":{"urgent":[],"waiting":[],"preparing":[]},"meta":{"now":"2025-09-07T08:57:07.602Z","counts":{"urgent":0,"waiting":0,"preparing":0},"total":0}}
+
+                  event: ping
+                  data: "pong"
+        '401':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
   /admin/tables/ensure:
     post:
       summary: 테이블 QR 코드용 암호화된 식별자 생성 API
