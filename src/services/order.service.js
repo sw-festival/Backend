@@ -1,6 +1,7 @@
 const { StatusCodes } = require('http-status-codes');
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 const AppError = require('../errors/AppError');
+const sseHub = require('../services/sse.service');
 const {
   sequelize,
   Order,
@@ -17,7 +18,7 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
   if (!Array.isArray(items) || items.length === 0)
     throw new AppError('items required', StatusCodes.BAD_REQUEST);
 
-  return await withRetry(async () => {
+  const out = await withRetry(async () => {
     return await sequelize.transaction(async (t) => {
       const [upRes] = await sequelize.query(
         `
@@ -128,6 +129,19 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
       };
     });
   });
+
+  try {
+    sseHub.publish('orders_changed', {
+      type: 'created',
+      order_id: out.order_id,
+    });
+    // 필요하면 재고 변동 이벤트도:
+    // sseHub.publish('inventory_changed', {...});
+  } catch (e) {
+    console.warn('[SSE publish failed - createOrder]', e);
+  }
+
+  return out;
 };
 
 // 유한 상태 머신
