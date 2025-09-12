@@ -100,6 +100,48 @@ paths:
                   type: boolean
                   default: true
 
+  /sessions/takeout/open:
+    post:
+      summary: 포장 테이블(slug)로 세션 열기 (멀티 세션)
+      description: >
+        포장 전용 테이블(slug)에 대해 **동시에 여러 세션을 허용**합니다.
+        - 기존 열린 세션을 만료시키지 않습니다.
+        - `Authorization` 불필요.
+        - 응답의 `data.session_token`을 이후 주문 API에 `Authorization: Session <token>` 또는 `x-session-token`으로 전달하세요.
+      tags: [ Public ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ slug ]
+              properties:
+                slug:
+                  type: string
+                  example: Ez6ZXz
+      responses:
+        '200':
+          description: Session opened successfully (takeout; multi-session allowed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOpenResponse'
+        '400':
+          description: Missing or invalid slug
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Takeout table not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
   /sessions/{id}/close:
     post:
       summary: 관리자 권한으로 세션 강제 종료 API
@@ -654,6 +696,10 @@ components:
           $ref: '#/components/schemas/Table'
         abs_ttl_min: { type: integer }
         idle_ttl_min: { type: integer }
+        channel: # ✅ optional, 응답 일관성용
+          type: string
+          enum: [ DINE_IN, TAKEOUT ]
+          example: TAKEOUT
 
     SessionOpenResponse:
       type: object

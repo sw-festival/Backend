@@ -25,20 +25,38 @@ module.exports = async (req, res, next) => {
 
     // 현재 테이블의 활성 세션인지 확인 (예전 토큰 차단 핵심)
     const table = await DiningTable.findByPk(ses.table_id, {
-      attributes: ['id', 'current_session_id'],
+      attributes: ['id', 'current_session_id', 'slug', 'label'],
     });
-    if (!table || table.current_session_id !== ses.id) {
+
+    if (!table) {
       return res
         .status(StatusCodes.UNPROCESSABLE_ENTITY)
-        .json({ success: false, message: 'session superseded' });
+        .json({ success: false, message: 'table not found' });
     }
+
+    const isTakeoutTable = table.slug === 'Ez6ZXz' || table.label === 'takeout';
+
+    if (!isTakeoutTable) {
+      if (table.current_session_id !== ses.id) {
+        return res
+          .status(StatusCodes.UNPROCESSABLE_ENTITY)
+          .json({ success: false, message: 'session superseded' });
+      }
+    }
+
+    const TAKEOUT_ABS_TTL_MIN = 120;
+    const TAKEOUT_IDLE_TTL_MIN = 15;
 
     // TTL 체크 (있으면)
     const now = Date.now();
     const createdAt = ses.createdAt?.getTime?.() ?? now;
     const lastActive = ses.last_active_at?.getTime?.() ?? createdAt;
-    const absTTL = Number(process.env.SESSION_ABS_TTL_MIN || 120) * 60 * 1000;
-    const idleTTL = Number(process.env.SESSION_IDLE_TTL_MIN || 30) * 60 * 1000;
+    const absTTL = isTakeoutTable
+      ? Number(TAKEOUT_ABS_TTL_MIN)
+      : Number(process.env.SESSION_ABS_TTL_MIN || 120) * 60 * 1000;
+    const idleTTL = isTakeoutTable
+      ? Number(TAKEOUT_IDLE_TTL_MIN)
+      : Number(process.env.SESSION_IDLE_TTL_MIN || 120) * 60 * 1000;
 
     if (now - createdAt > absTTL || now - lastActive > idleTTL) {
       await ses.update({ status: 'EXPIRED', active_flag: 0 });

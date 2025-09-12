@@ -15,20 +15,11 @@ const IDLE =
   parseInt(process.env.SESSION_IDLE_TTL_MIN || '120', 10) * 60 * 1000; // 유휴 TTL
 const TOKEN_BYTES = parseInt(process.env.SESSION_TOKEN_BYTES || '32', 10);
 
-async function openSessionForTable(table, t) {
-  await OrderSession.update(
-    {
-      status: 'CLOSED',
-      active_flag: 0,
-      closed_reason: 'NEW_SESSION',
-    },
-    {
-      where: { table_id: table.id, status: 'OPEN', active_flag: 1 },
-      transaction: t,
-    }
-  );
+async function openSessionForTable(table, t, { isTakeout }) {
+  if (!isTakeout) throw new Error('order type is not takeout');
 
-  const session_token = crypto.randomBytes(TOKEN_BYTES).toString('hex');
+  const session_token = makeRandomToken();
+
   const ses = await OrderSession.create(
     {
       table_id: table.id,
@@ -41,8 +32,8 @@ async function openSessionForTable(table, t) {
   );
 
   return {
-    session_token: ses.session_token,
     session_id: ses.id,
+    session_token: ses.session_token,
     table: { id: table.id, label: table.label, slug: table.slug },
     abs_ttl_min: Math.floor(ABS / 60000),
     idle_ttl_min: Math.floor(IDLE / 60000),
@@ -149,6 +140,21 @@ exports.openBySlugWithCode = async ({ slug, code }) => {
         idle_ttl_min: Number(process.env.SESSION_IDLE_TTL_MIN || 30),
       };
     });
+  });
+};
+
+// 멀티 세션용
+exports.openTakeoutSession = async (slug) => {
+  return sequelize.transaction(async (t) => {
+    const table = await DiningTable.findOne({
+      where: { slug, is_active: true },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!table) throw new Error('takeout table not found or inactive');
+    if (table.label !== 'takeout') throw new Error('order type is not takeout');
+
+    return openSessionForTable(table, t, { isTakeout: true });
   });
 };
 
