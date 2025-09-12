@@ -6,6 +6,8 @@ const sessionController = require('../controllers/session.controller');
 
 router.post('/open-by-slug', sessionController.openBySlugWithCode);
 
+router.post('/takeout/open', sessionController.openTakeoutSession);
+
 router.post('/:id/close', sessionController.closeSessionById);
 
 module.exports = router;

@@ -1,5 +1,5 @@
 const { StatusCodes } = require('http-status-codes');
-const { Op, literal } = require('sequelize');
+const { Op, literal, fn, col, where: w } = require('sequelize');
 const AppError = require('../errors/AppError');
 const sseHub = require('../services/sse.service');
 const {
@@ -250,4 +250,185 @@ exports.getOrderDetail = async (orderId) => {
     console.error(err);
     throw err;
   }
+};
+
+function decodeCursor(cur) {
+  if (!cur) return null;
+  const [ts, id] = Buffer.from(cur, 'base64').toString('utf8').split('|');
+  return { ts: new Date(ts), id: Number(id) };
+}
+function encodeCursor(row) {
+  const ts =
+    row.get('created_at') instanceof Date
+      ? row.get('created_at')
+      : new Date(row.get('created_at'));
+  return Buffer.from(`${ts.toISOString()}|${row.id}`).toString('base64');
+}
+
+// 항상 DESC 정렬(실제 컬럼을 fully-qualified로)
+const ORDER_DESC = [
+  [col('Order.created_at'), 'DESC'],
+  [col('Order.id'), 'DESC'],
+];
+
+function buildFilters({ filters }) {
+  const where = {};
+  const include = [];
+
+  if (filters?.status) {
+    where.status = { [Op.in]: String(filters.status).split(',') };
+  }
+  if (filters?.order_type) {
+    where.order_type = { [Op.in]: String(filters.order_type).split(',') };
+  }
+  if (filters?.from) {
+    where.created_at = {
+      ...(where.created_at || {}),
+      [Op.gte]: new Date(filters.from),
+    };
+  }
+  if (filters?.to) {
+    where.created_at = {
+      ...(where.created_at || {}),
+      [Op.lte]: new Date(filters.to),
+    };
+  }
+
+  if (filters?.table_slug) {
+    include.push({
+      model: DiningTable,
+      attributes: [], // 필터만
+      where: { slug: String(filters.table_slug) },
+      required: true,
+    });
+  }
+
+  return { where, include };
+}
+
+function buildCursorWhere({ after, before }) {
+  const a = decodeCursor(after);
+  const b = decodeCursor(before);
+
+  if (a) {
+    // older: (created_at < ts) OR (created_at = ts AND id < id)
+    return {
+      [Op.or]: [
+        { created_at: { [Op.lt]: a.ts } },
+        { [Op.and]: [{ created_at: a.ts }, { id: { [Op.lt]: a.id } }] },
+      ],
+    };
+  }
+  if (b) {
+    // newer: (created_at > ts) OR (created_at = ts AND id > id)
+    return {
+      [Op.or]: [
+        { created_at: { [Op.gt]: b.ts } },
+        { [Op.and]: [{ created_at: b.ts }, { id: { [Op.gt]: b.id } }] },
+      ],
+    };
+  }
+  return {};
+}
+
+exports.listOrders = async ({ limit = 20, after, before, filters, scope }) => {
+  const { where, include } = buildFilters({ filters });
+
+  // 사용자 스코프: 해당 세션 주문만
+  if (scope?.sessionId) {
+    where.order_session_id = scope.sessionId;
+  }
+
+  const hasKeys = (obj) =>
+    !!obj && (Object.keys(obj).length > 0 || Object.getOwnPropertySymbols(obj).length > 0);
+
+  const cursorWhere = buildCursorWhere({ after, before });
+
+  const finalWhere = hasKeys(cursorWhere)
+    ? (hasKeys(where) ? { [Op.and]: [where, cursorWhere] } : cursorWhere)
+    : where;
+
+  // 정확한 has_more 위해 limit+1
+  const limitPlus = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100)) + 1;
+
+  const rows = await Order.findAll({
+    where: finalWhere,
+    subQuery: false, // 서브쿼리 비활성화 (include + limit 시 커서 무시 방지)
+    distinct: true, // join 시 중복 제거
+    include: [
+      ...include,
+      // 테이블 정보(노출용)
+      ...(include.some((i) => i.model === DiningTable)
+        ? []
+        : [
+            {
+              model: DiningTable,
+              attributes: ['label', 'slug'],
+              required: false,
+            },
+          ]),
+      // 주문 항목 (페이징 깨지지 않도록 별도 쿼리)
+      {
+        model: OrderProduct,
+        as: 'items',
+        separate: true,
+        attributes: [
+          'id',
+          'product_id',
+          'quantity',
+          'unit_price',
+          'line_total',
+        ],
+        include: [{ model: Product, attributes: ['id', 'name'] }],
+        order: [['id', 'ASC']],
+      },
+    ],
+    attributes: [
+      'id',
+      'status',
+      'order_type',
+      'payer_name',
+      'total_amount',
+      'created_at', // ✅ 실제 컬럼명 선택
+    ],
+    order: ORDER_DESC,
+    limit: limitPlus,
+    // logging: process.env.SQL_LOG === '1' ? console.log : false, // 필요시 .env로 켜기
+    logging: console.log,
+  });
+
+  const has_more = rows.length === limitPlus;
+  const slice = has_more ? rows.slice(0, limitPlus - 1) : rows;
+
+  const first = slice[0];
+  const last = slice[slice.length - 1];
+
+  return {
+    items: slice.map((r) => ({
+      id: r.id,
+      status: r.status,
+      order_type: r.order_type,
+      payer_name: r.payer_name ?? null,
+      created_at: r.get('created_at'),
+      total_amount: r.total_amount ?? null,
+      table: r.DiningTable
+        ? { label: r.DiningTable.label, slug: r.DiningTable.slug }
+        : null,
+      items: Array.isArray(r.items)
+        ? r.items.map((it) => ({
+            id: it.id,
+            product_id: it.product_id,
+            name: it.Product?.name ?? null,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            line_total: it.line_total,
+          }))
+        : [],
+    })),
+    page_info: {
+      next_cursor: last ? encodeCursor(last) : null, // 더 과거로 내려갈 때(after)
+      prev_cursor: first ? encodeCursor(first) : null, // 더 최신으로 올라갈 때(before)
+      has_more,
+    },
+  };
 };

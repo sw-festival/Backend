@@ -8,6 +8,142 @@ servers:
     description: Local dev
 
 paths:
+  /orders:
+    get:
+      summary: 내 주문 목록 조회
+      description: 세션 토큰을 이용해 사용자의 주문 목록을 커서 기반 페이지네이션으로 조회합니다.
+      tags: [ Orders ]
+      security:
+        - SessionAuth: [ ]
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+          description: 한 번에 가져올 주문 수 (기본 20)
+        - in: query
+          name: after
+          schema: { type: string }
+          description: 이 커서 이후(더 과거)의 주문을 조회
+        - in: query
+          name: before
+          schema: { type: string }
+          description: 이 커서 이전(더 최신)의 주문을 조회
+        - in: query
+          name: status
+          schema: { type: string, example: PENDING }
+          description: 주문 상태 필터 (쉼표로 구분 가능)
+        - in: query
+          name: order_type
+          schema: { type: string, example: DINE_IN }
+          description: 주문 유형 필터 (쉼표로 구분 가능, DINE_IN, TAKEOUT)
+        - in: query
+          name: table_slug
+          schema: { type: string, example: "A-10-slug" }
+          description: 특정 테이블 slug 필터
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+          description: 이 날짜 이후 주문만 조회
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+          description: 이 날짜 이전 주문만 조회
+      responses:
+        '200':
+          description: 내 주문 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+    post:
+      summary: Create an order (session required)
+      tags: [ Public ]
+      # 세션 토큰 두 방식 중 하나로 인증: Authorization: Session <token> 또는 x-session-token
+      security:
+        - sessionAuth: [ ]
+        - xSessionTokenAuth: [ ]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreateResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+
+  /orders/admin:
+    get:
+      summary: 전체 주문 목록 조회 (관리자)
+      description: 관리자 권한으로 모든 주문 목록을 커서 기반 페이지네이션으로 조회합니다.
+      tags: [ Orders ]
+      security:
+        - AdminAuth: [ ]
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+          description: 한 번에 가져올 주문 수 (기본 20)
+        - in: query
+          name: after
+          schema: { type: string }
+          description: 이 커서 이후(더 과거)의 주문을 조회
+        - in: query
+          name: before
+          schema: { type: string }
+          description: 이 커서 이전(더 최신)의 주문을 조회
+        - in: query
+          name: status
+          schema: { type: string, example: PENDING }
+          description: 주문 상태 필터 (쉼표로 구분 가능)
+        - in: query
+          name: order_type
+          schema: { type: string, example: TAKEOUT }
+          description: 주문 유형 필터 (쉼표로 구분 가능, DINE_IN, TAKEOUT)
+        - in: query
+          name: table_slug
+          schema: { type: string, example: "B-2-slug" }
+          description: 특정 테이블 slug 필터
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+          description: 이 날짜 이후 주문만 조회
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+          description: 이 날짜 이전 주문만 조회
+      responses:
+        '200':
+          description: 전체 주문 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+
   /sse/orders/stream:
     get:
       summary: (관리자) 실시간 주문 스트림 (SSE)
@@ -99,6 +235,48 @@ paths:
                 active:
                   type: boolean
                   default: true
+
+  /sessions/takeout/open:
+    post:
+      summary: 포장 테이블(slug)로 세션 열기 (멀티 세션)
+      description: >
+        포장 전용 테이블(slug)에 대해 **동시에 여러 세션을 허용**합니다.
+        - 기존 열린 세션을 만료시키지 않습니다.
+        - `Authorization` 불필요.
+        - 응답의 `data.session_token`을 이후 주문 API에 `Authorization: Session <token>` 또는 `x-session-token`으로 전달하세요.
+      tags: [ Public ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ slug ]
+              properties:
+                slug:
+                  type: string
+                  example: Ez6ZXz
+      responses:
+        '200':
+          description: Session opened successfully (takeout; multi-session allowed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOpenResponse'
+        '400':
+          description: Missing or invalid slug
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Takeout table not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
 
   /sessions/{id}/close:
     post:
@@ -227,48 +405,6 @@ paths:
                 code:
                   type: string
                   example: sC2mj4Kgp
-
-  /orders:
-    post:
-      summary: Create an order (session required)
-      tags: [ Public ]
-      # 세션 토큰 두 방식 중 하나로 인증: Authorization: Session <token> 또는 x-session-token
-      security:
-        - sessionAuth: [ ]
-        - xSessionTokenAuth: [ ]
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrderCreateResponse'
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: Conflict
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ServerError'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OrderCreateRequest'
 
   /orders/{id}/status:
     patch:
@@ -513,6 +649,54 @@ components:
       description: 사용자 세션 토큰(대안 헤더)
 
   schemas:
+    OrderListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: "orders listed" }
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderSummary'
+            page_info:
+              $ref: '#/components/schemas/PageInfo'
+
+    OrderSummary:
+      type: object
+      properties:
+        id: { type: integer, example: 7 }
+        status: { type: string, example: PENDING }
+        order_type: { type: string, example: DINE_IN }
+        payer_name: { type: string, example: "홍길동" }
+        created_at: { type: string, format: date-time, example: "2025-09-07T09:16:27.000Z" }
+        total_amount: { type: string, example: "20000.00" }
+        table:
+          type: object
+          nullable: true
+          properties:
+            label: { type: string, example: "A-10" }
+            slug: { type: string, example: "6ZSZB6n4LOp" }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer, example: 12 }
+              product_id: { type: integer, example: 1 }
+              name: { type: string, example: "김치전" }
+              quantity: { type: integer, example: 2 }
+              unit_price: { type: string, example: "6000.00" }
+              line_total: { type: string, example: "12000.00" }
+
+    PageInfo:
+      type: object
+      properties:
+        next_cursor: { type: string, nullable: true, example: "MjAyNS0wOS0wN1QwOToxNjoyNy4wMDBafDc=" }
+        prev_cursor: { type: string, nullable: true, example: null }
+        has_more: { type: boolean, example: true }
     # ===== 메뉴 =====
     MenuType:
       type: string
@@ -654,6 +838,10 @@ components:
           $ref: '#/components/schemas/Table'
         abs_ttl_min: { type: integer }
         idle_ttl_min: { type: integer }
+        channel: # ✅ optional, 응답 일관성용
+          type: string
+          enum: [ DINE_IN, TAKEOUT ]
+          example: TAKEOUT
 
     SessionOpenResponse:
       type: object

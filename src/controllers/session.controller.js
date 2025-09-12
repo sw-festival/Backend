@@ -35,6 +35,29 @@ exports.openBySlugWithCode = async (req, res, next) => {
   }
 };
 
+// 멀티 세션용
+exports.openTakeoutSession = async (req, res, next) => {
+  try {
+    const { slug } = req.body || {};
+    if (!slug) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'slug must be required',
+      });
+    }
+
+    const data = await sessionService.openTakeoutSession(slug);
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'takeout session opened',
+      data: { ...data, channel: 'TAKEOUT' },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.closeSessionById = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
