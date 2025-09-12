@@ -148,3 +148,63 @@ exports.getOrderDetailAdmin = async (req, res, next) => {
     next(err);
   }
 };
+
+function parseLimit(q) {
+  return Math.max(1, Math.min(parseInt(q?.limit ?? '20', 10) || 20, 100));
+}
+
+
+exports.listMyOrders = async (req, res, next) => {
+  try {
+    const { after, before, status, order_type, table_slug, from, to } = req.query || {};
+    if (after && before) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false, message: 'Use either after or before, not both',
+      });
+    }
+
+    const limit = parseLimit(req.query);
+    const sessionId = req.orderSession?.id; // sessionAuth에서 세팅됨
+
+    const result = await orderService.listOrders({
+      limit,
+      after,
+      before,
+      filters: { status, order_type, table_slug, from, to },
+      scope: { sessionId }, // 본인 세션으로 제한
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'orders listed',
+      data: result,
+    });
+  } catch (err) { next(err); }
+};
+
+exports.listAllOrders = async (req, res, next) => {
+  try {
+    const { after, before, status, order_type, table_slug, from, to } = req.query || {};
+    if (after && before) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false, message: 'Use either after or before, not both',
+      });
+    }
+
+    const limit = parseLimit(req.query);
+
+    const result = await orderService.listOrders({
+      limit,
+      after,
+      before,
+      filters: { status, order_type, table_slug, from, to },
+      scope: { /* admin: no session restriction */ },
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'orders listed (admin)',
+      data: result,
+    });
+  } catch (err) { next(err); }
+};
