@@ -16,7 +16,7 @@ const Product = sequelize.define(
       comment: '메뉴명',
     },
     type: {
-      type: DataTypes.ENUM('SET', 'MAIN', 'SIDE', 'DRINK'),
+      type: DataTypes.ENUM('SET', 'MAIN', 'SIDE', 'DRINK', 'ALCOHOL'),
       allowNull: false,
       comment: '메뉴 종류'
     },
