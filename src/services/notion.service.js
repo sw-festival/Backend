@@ -24,9 +24,8 @@ async function expandLinesForNotion(lines) {
         });
       }
     }
-
-    return out;
   }
+  return out;
 }
 
 async function createNotionRowsForOrder({ order, lines, tableLabel }) {
