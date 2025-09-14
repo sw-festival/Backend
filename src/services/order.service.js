@@ -1,25 +1,33 @@
 const { StatusCodes } = require('http-status-codes');
 const { Op, literal, fn, col, where: w } = require('sequelize');
+
 const AppError = require('../errors/AppError');
 const sseHub = require('../services/sse.service');
+const { createOrder } = require('../services/notion.service');
+const { Client } = require('@notionhq/client');
+
 const {
   sequelize,
   Order,
   OrderProduct,
   Product,
   DiningTable,
-  OrderSession,
 } = require('../models');
 const { withRetry } = require('../utils/retry');
 
+/* =========================
+ * 주문 생성
+ * ========================= */
 exports.createOrder = async ({ session, order_type, payer_name, items }) => {
   if (!session)
     throw new AppError('Session required', StatusCodes.UNAUTHORIZED);
-  if (!Array.isArray(items) || items.length === 0)
+  if (!Array.isArray(items) || items.length === 0) {
     throw new AppError('items required', StatusCodes.BAD_REQUEST);
+  }
 
   const out = await withRetry(async () => {
     return await sequelize.transaction(async (t) => {
+      // 세션 카운트/활성 갱신
       const [upRes] = await sequelize.query(
         `
         UPDATE order_sessions
@@ -28,7 +36,7 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
                last_active_at   = NOW()
          WHERE id = ?
            AND status = 'OPEN'
-      `,
+        `,
         { replacements: [session.id], transaction: t }
       );
 
@@ -38,19 +46,21 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
           : typeof upRes === 'number'
             ? upRes
             : 0;
-      if (!affected)
+      if (!affected) {
         throw new AppError(
           'Invalid or closed session',
           StatusCodes.UNPROCESSABLE_ENTITY
         );
+      }
 
+      // 세션 잠금 읽기
       const [[sesRow]] = await sequelize.query(
         `
         SELECT id, table_id, order_count, visit_started_at
           FROM order_sessions
          WHERE id = ?
          FOR UPDATE
-      `,
+        `,
         { replacements: [session.id], transaction: t }
       );
 
@@ -60,6 +70,7 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         ? new Date(sesRow.visit_started_at)
         : new Date();
 
+      // 라인 계산
       let subtotal = 0;
       const lines = [];
       for (const it of items) {
@@ -72,20 +83,25 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
             `invalid product: ${it.product_id}`,
             StatusCodes.BAD_REQUEST
           );
+
         const qty = Number(it.quantity || 0);
         if (qty < 1)
           throw new AppError('quantity >= 1', StatusCodes.BAD_REQUEST);
+
         const unit = Number(p.price);
         const line = Number((unit * qty).toFixed(2));
         subtotal = Number((subtotal + line).toFixed(2));
+
         lines.push({
           product_id: p.id,
+          product_name: p.name,
           quantity: qty,
           unit_price: unit,
           line_total: line,
         });
       }
 
+      // 할인/합계
       let discount = 0,
         reason = null;
       if (order_type === 'TAKEOUT') {
@@ -94,11 +110,12 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
       }
       const total = Number((subtotal - discount).toFixed(2));
 
+      // 주문 생성
       const order = await Order.create(
         {
           order_session_id: session.id,
           table_id: tableId,
-          order_seq: nextSeq, // ← 중요
+          order_seq: nextSeq,
           payer_name: payer_name || null,
           order_type: order_type || 'DINE_IN',
           status: 'PENDING',
@@ -110,6 +127,7 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         { transaction: t }
       );
 
+      // 항목 생성
       for (const L of lines) {
         await OrderProduct.create(
           { order_id: order.id, ...L },
@@ -117,6 +135,7 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         );
       }
 
+      // 트랜잭션 결과(노션용 보조 데이터 포함)
       return {
         order_id: order.id,
         order_seq: order.order_seq,
@@ -126,17 +145,45 @@ exports.createOrder = async ({ session, order_type, payer_name, items }) => {
         discount_amount: order.discount_amount,
         total_amount: order.total_amount,
         first_order_at: firstOrderAt,
+        _notion: {
+          tableId,
+          lines, // product_name 포함
+          payer_name: order.payer_name,
+        },
       };
     });
   });
 
+  // 트랜잭션 밖: 노션 동기화 (실패해도 주문 성공은 유지)
+  (async () => {
+    try {
+      const table = await DiningTable.findByPk(out._notion.tableId, {
+        attributes: ['label'],
+        raw: true,
+      });
+      const tableLabel = table?.label ?? String(out._notion.tableId);
+
+      await createOrder({
+        order: {
+          order_type: out.order_type, // ← out에 이미 들어있음
+          payer_name: out._notion.payer_name,
+          status: out.status,
+          table_id: out._notion.tableId,
+        },
+        lines: out._notion.lines,
+        tableLabel,
+      });
+    } catch (err) {
+      console.warn('[NOTION] sync failed:', err?.body || err);
+    }
+  })();
+
+  // SSE 알림 (에러는 무시)
   try {
     sseHub.publish('orders_changed', {
       type: 'created',
       order_id: out.order_id,
     });
-    // 필요하면 재고 변동 이벤트도:
-    // sseHub.publish('inventory_changed', {...});
   } catch (e) {
     console.warn('[SSE publish failed - createOrder]', e);
   }
@@ -340,12 +387,16 @@ exports.listOrders = async ({ limit = 20, after, before, filters, scope }) => {
   }
 
   const hasKeys = (obj) =>
-    !!obj && (Object.keys(obj).length > 0 || Object.getOwnPropertySymbols(obj).length > 0);
+    !!obj &&
+    (Object.keys(obj).length > 0 ||
+      Object.getOwnPropertySymbols(obj).length > 0);
 
   const cursorWhere = buildCursorWhere({ after, before });
 
   const finalWhere = hasKeys(cursorWhere)
-    ? (hasKeys(where) ? { [Op.and]: [where, cursorWhere] } : cursorWhere)
+    ? hasKeys(where)
+      ? { [Op.and]: [where, cursorWhere] }
+      : cursorWhere
     : where;
 
   // 정확한 has_more 위해 limit+1
