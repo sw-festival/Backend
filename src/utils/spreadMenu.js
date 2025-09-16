@@ -14,11 +14,11 @@ exports.spreadMenu = async function spreadMenu({ productId }) {
     return [{ product_id: product.id, product_name: product.name }];
   }
 
-  // 세트일 때: MAIN / SIDE / DRINK 전부 조회
+  // 세트일 때: MAIN / SIDE / ALCOHOL 전부 조회
   const [mains, sides, drinks] = await Promise.all([
     Product.findAll({ where: { type: 'MAIN', is_active: true }, raw: true }),
     Product.findAll({ where: { type: 'SIDE', is_active: true }, raw: true }),
-    Product.findAll({ where: { type: 'DRINK', is_active: true }, raw: true }),
+    Product.findAll({ where: { type: 'ALCOHOL', is_active: true }, raw: true }),
   ]);
 
   // 메인에만 배수 규칙 적용
