@@ -18,7 +18,7 @@ exports.spreadMenu = async function spreadMenu({ productId }) {
   const [mains, sides, drinks] = await Promise.all([
     Product.findAll({ where: { type: 'MAIN', is_active: true }, raw: true }),
     Product.findAll({ where: { type: 'SIDE', is_active: true }, raw: true }),
-    Product.findAll({ where: { type: 'ALCOHOL', is_active: true }, raw: true }),
+    Product.findAll({ where: { type: 'DRINK', is_active: true }, raw: true }),
   ]);
 
   // 메인에만 배수 규칙 적용
