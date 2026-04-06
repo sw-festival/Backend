@@ -203,53 +203,56 @@ const ALLOWED = {
 exports.updateOrderStatus = async ({ id, action, reason, admin }) => {
   if (!action) throw new AppError('action required', StatusCodes.BAD_REQUEST);
 
-  return await sequelize.transaction(async (t) => {
-    const order = await Order.findByPk(id, {
-      include: [{ model: OrderProduct, as: 'items' }],
-      transaction: t,
-      lock: t.LOCK.UPDATE,
+  return await withRetry(async () => {
+    return await sequelize.transaction(async (t) => {
+      const order = await Order.findByPk(id, {
+        include: [{ model: OrderProduct, as: 'items' }],
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      if (!order) {
+        throw new AppError('order not found', StatusCodes.NOT_FOUND);
+      }
+
+      const next = ALLOWED[order.status]?.[action];
+      if (!next) {
+        throw new AppError(
+          `invalid transition: ${order.status} -> (${action})`,
+          StatusCodes.CONFLICT
+        );
+      }
+
+      if (order.status === 'PENDING' && action === 'confirm') {
+        for (const it of order.items) {
+          const [affected] = await Product.update(
+            { stock: literal(`stock - ${it.quantity}`) },
+            {
+              where: { id: it.product_id, stock: { [Op.gte]: it.quantity } },
+              transaction: t,
+            }
+          );
+          if (!affected)
+            throw new AppError('out of stock', StatusCodes.CONFLICT);
+        }
+      }
+
+      if (order.status === 'CONFIRMED' && action === 'cancel') {
+        for (const it of order.items) {
+          await Product.update(
+            { stock: literal(`stock + ${it.quantity}`) },
+            { where: { id: it.product_id }, transaction: t }
+          );
+        }
+      }
+
+      const prev = order.status;
+      order.status = next;
+
+      await order.save({ transaction: t });
+
+      return { order_id: id, prev, next };
     });
-
-    if (!order) {
-      throw new AppError('order not found', StatusCodes.NOT_FOUND);
-    }
-
-    const next = ALLOWED[order.status]?.[action];
-    if (!next) {
-      throw new AppError(
-        `invalid transition: ${order.status} -> (${action})`,
-        StatusCodes.CONFLICT
-      );
-    }
-
-    if (order.status === 'PENDING' && action === 'confirm') {
-      for (const it of order.items) {
-        const [affected] = await Product.update(
-          { stock: literal(`stock - ${it.quantity}`) },
-          {
-            where: { id: it.product_id, stock: { [Op.gte]: it.quantity } },
-            transaction: t,
-          }
-        );
-        if (!affected) throw new AppError('out of stock', StatusCodes.CONFLICT);
-      }
-    }
-
-    if (order.status === 'CONFIRMED' && action === 'cancel') {
-      for (const it of order.items) {
-        await Product.update(
-          { stock: literal(`stock + ${it.quantity}`) },
-          { where: { id: it.product_id }, transaction: t }
-        );
-      }
-    }
-
-    const prev = order.status;
-    order.status = next;
-
-    await order.save({ transaction: t });
-
-    return { order_id: id, prev, next };
   });
 };
 
